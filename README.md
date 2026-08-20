@@ -12,9 +12,7 @@ ones on the way.
 Run it yourself, or use the hosted build at
 [terminal.superior.trade](https://terminal.superior.trade).
 
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg?style=flat-square)](LICENSE)
-[![Node](https://img.shields.io/badge/node-%E2%89%A520.9-brightgreen.svg?style=flat-square)](https://nodejs.org)
-[![Next.js](https://img.shields.io/badge/Next.js-16-black.svg?style=flat-square)](https://nextjs.org)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg?style=flat-square)](LICENSE) [![Node](https://img.shields.io/badge/node-%E2%89%A520.9-brightgreen.svg?style=flat-square)](https://nodejs.org) [![Next.js](https://img.shields.io/badge/Next.js-16-black.svg?style=flat-square)](https://nextjs.org)
 
 <img src="docs/media/terminal.png" alt="A path drawn on the chart, the agent scanning it, and a ranked setup returned with entry, stop and target" width="900">
 
@@ -59,13 +57,13 @@ def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFram
 **4. It runs.** Live PnL, an auto-stop timer if the edge is time-boxed, and an inbox
 that tells you when something happened.
 
-*The plan is not just text — entry, stop and target are drawn on the chart you are
-looking at, and every card carries its own reasoning, R multiple and confidence tier.*
+<div align="center">
 
 <img src="docs/media/deployments.png" alt="The running-setups panel listing deployed strategies with their status, levels and controls" width="900">
 
-*The other half: what you have deployed, what state each one is in, and the controls
-to restart, stop or delete it.*
+<sub>The other half — what you have deployed, what state it is in, and the controls.</sub>
+
+</div>
 
 ## Hosted or self-hosted
 
@@ -191,8 +189,8 @@ npm run preview       # render README.md the way GitHub will, images and all
 data, real model calls. It never spends money: deploying and withdrawing are the two
 irreversible actions and it stops short of both.
 
-`evals/` holds the agent evaluations. Prompt changes get judged there, not by vibes —
-see [CONTRIBUTING.md](CONTRIBUTING.md).
+`evals/` holds the agent evaluations, including the suites a prompt change should be
+measured against.
 
 ## Contributing
 
@@ -203,8 +201,6 @@ What merges here also ships to the hosted build — it runs this repository.
 
 ## License
 
-[Apache-2.0](LICENSE) © Superior Trade.
-
-The Superior Trade API is a hosted service and is not part of this repository.
-TradingView's Advanced Charts is licensed separately by TradingView and is not included.
-Third-party notices: [NOTICE](NOTICE).
+[Apache-2.0](LICENSE) © Superior Trade. TradingView's Advanced Charts is licensed
+separately by TradingView and is not included here — see [NOTICE](NOTICE) for that and
+the other third-party notices.

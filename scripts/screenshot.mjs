@@ -36,6 +36,21 @@ await ctx.addInitScript(() => {
   window.localStorage.setItem("cg-privacy", "1");
 });
 
+// Next's dev overlay parks a build-status pill in the corner. It is invisible in
+// a production build and meaningless to a reader, but it lands in every
+// screenshot taken against `npm run dev`. Injected as an init script rather than
+// addStyleTag so it survives the reload the hero shot depends on.
+await ctx.addInitScript(() => {
+  const hide = () => {
+    const el = document.createElement("style");
+    el.textContent =
+      "nextjs-portal,[data-nextjs-toast],[data-nextjs-dev-tools-button],#__next-build-watcher{display:none!important}";
+    document.head?.appendChild(el);
+  };
+  if (document.head) hide();
+  else document.addEventListener("DOMContentLoaded", hide);
+});
+
 const page = await ctx.newPage();
 page.on("console", (m) => {
   if (m.type() === "error") console.log(`  [page error] ${m.text().slice(0, 160)}`);
@@ -78,16 +93,32 @@ try {
 // shot needs real setups in it. This runs a genuine detect against the live
 // model — it costs OpenRouter tokens and takes the better part of a minute.
 // SHOT_DETECT=0 skips it.
-if (process.env.SHOT_DETECT !== "0") {
-  console.log("  running a detect (real model call, ~30-60s)…");
+{
+  // Draft setups persist, so a detect is only needed when the panel is empty.
+  // Re-running one on every capture would burn a minute and OpenRouter tokens
+  // to arrive at the same screenshot. SHOT_DETECT=1 forces a fresh one.
+  const existing = await page.locator("text=/ONE-SHOT|RECURRING/i").count();
+  const needsDetect = existing === 0 || process.env.SHOT_DETECT === "1";
   try {
-    await page.getByText("DETECT SETUPS", { exact: false }).first().click();
-    // Cards carry a tier badge; wait for the first one rather than a fixed sleep.
-    // /api/detect declares maxDuration = 300, and a slow model genuinely uses it
-    // — one observed run took 3.0 minutes. Wait to the route's own ceiling
-    // rather than guessing lower and calling a slow success a failure.
-    await page.waitForSelector("text=/ONE-SHOT|RECURRING/i", { timeout: 290_000 });
-    await page.waitForTimeout(6_000); // let the rest of the cards land
+    if (needsDetect) {
+      console.log("  panel is empty — running a detect (real model call, ~30-60s)…");
+      await page.getByText("DETECT SETUPS", { exact: false }).first().click();
+      // Cards carry a tier badge; wait for the first rather than a fixed sleep.
+      // /api/detect declares maxDuration = 300 and a slow model genuinely uses
+      // it — one observed run took 3.0 minutes. Wait to the route's own ceiling
+      // rather than guessing lower and calling a slow success a failure.
+      await page.waitForSelector("text=/ONE-SHOT|RECURRING/i", { timeout: 290_000 });
+      await page.waitForTimeout(6_000); // let the rest of the cards land
+    } else {
+      console.log(`  ${existing} setup(s) already on the panel — no detect needed`);
+    }
+
+    // Reload before the hero shot. A detect leaves the agent's written answer
+    // sitting over the candles, which is the busiest possible version of the
+    // chart; the cards themselves persist, so a reload keeps the substance and
+    // drops the overlay.
+    await page.reload({ waitUntil: "domcontentloaded", timeout: 120_000 });
+    await page.waitForTimeout(Number(process.env.SHOT_SETTLE ?? 12_000));
     await page.screenshot({ path: `${OUT}/terminal.png`, animations: "disabled" });
     console.log(`  wrote ${OUT}/terminal.png`);
 
