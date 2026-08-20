@@ -61,6 +61,11 @@ that tells you when something happened.
 *The plan is not just text — entry, stop and target are drawn on the chart you are
 looking at, and every card carries its own reasoning, R multiple and confidence tier.*
 
+<img src="docs/media/deployments.png" alt="The running-setups panel listing deployed strategies with their status, levels and controls" width="900">
+
+*The other half: what you have deployed, what state each one is in, and the controls
+to restart, stop or delete it.*
+
 ## Hosted or self-hosted
 
 The hosted build at [terminal.superior.trade](https://terminal.superior.trade) is this
@@ -168,7 +173,6 @@ Not investment advice. No promise of profit. You are responsible for what you ru
 | [docs/strategy-pipeline.md](docs/strategy-pipeline.md) | Generation, validation, repair, logging |
 | [docs/charting-library.md](docs/charting-library.md) | Installing TradingView Advanced Charts |
 | [docs/withdrawals.md](docs/withdrawals.md) | How money gets out, and how far this repo takes it |
-| [docs/bracket-orders.md](docs/bracket-orders.md) | One-shot plans as native exchange orders |
 | [docs/self-hosting.md](docs/self-hosting.md) | Configuration, databases, running it somewhere else |
 
 ## Development

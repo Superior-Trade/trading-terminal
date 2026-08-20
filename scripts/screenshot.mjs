@@ -60,6 +60,20 @@ await page.waitForTimeout(Number(process.env.SHOT_SETTLE ?? 12_000));
 await page.screenshot({ path: `${OUT}/terminal-empty.png`, animations: "disabled" });
 console.log(`  wrote ${OUT}/terminal-empty.png`);
 
+// The deployments side of the app: what you have deployed, its state, and the
+// controls. A tab is a far more reliable click target than a setup card, and
+// this is the half of the product a chart screenshot never shows.
+try {
+  await page.getByText("RUNNING SETUPS", { exact: false }).first().click();
+  await page.waitForTimeout(7_000);
+  await page.screenshot({ path: `${OUT}/deployments.png`, animations: "disabled" });
+  console.log(`  wrote ${OUT}/deployments.png`);
+  await page.getByText("DRAFT SETUPS", { exact: false }).first().click();
+  await page.waitForTimeout(2_500);
+} catch {
+  console.log("  ! could not open the running-setups tab — skipping that shot");
+}
+
 // An empty right-hand panel shows the chrome and none of the point, so the hero
 // shot needs real setups in it. This runs a genuine detect against the live
 // model — it costs OpenRouter tokens and takes the better part of a minute.

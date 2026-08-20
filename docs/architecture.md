@@ -76,7 +76,15 @@ matters.
 
 - A **recurring** strategy deploys as a live Freqtrade bot (`/api/deploy`).
 - A **one-shot** plan with a fixed entry needs no bot at all — it becomes native exchange
-  orders, entry plus reduce-only TP and SL ([bracket-orders.md](bracket-orders.md)).
+  orders — entry plus reduce-only take-profit and stop-loss, placed atomically as
+  one Hyperliquid `order` action with `grouping: "normalTpsl"`. The TP and SL park
+  until the entry fills, then arm as an OCO pair. No pod to run, and the exchange
+  holds the orders, so it survives a restart.
+
+  A bracket occupies a trading wallet exactly like a deployment does, which is why
+  teardown is deployment-scoped rather than wallet-scoped — a wallet-wide "cancel
+  everything" would kill an unrelated bracket sharing that wallet. Leverage is a
+  separate exchange call made before the entry, not part of it.
 
 **6 — Afterwards.** Live PnL polls every few seconds. A time-boxed plan carries an
 `aliveUntil`, and `/api/cron/one-shot-sweep` stops one-shot deployments once their trade
