@@ -21,3 +21,6 @@ public/static/datafeeds/
 .DS_Store
 .idea/
 .vscode/
+
+# staged for upload to GitHub's CDN, never committed (see docs/media/README.md)
+docs/media/demo-github.mp4

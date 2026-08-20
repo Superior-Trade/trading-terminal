@@ -12,8 +12,7 @@ it, and runs it live.
 [![Node](https://img.shields.io/badge/node-%E2%89%A520.9-brightgreen.svg)](https://nodejs.org)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black.svg)](https://nextjs.org)
 
-<!-- SCREENSHOT GOES HERE — chart with a drawn setup, chat open, running setups in the
-     sidebar. See docs/screenshots/README.md for what to capture and how. -->
+<img src="docs/media/terminal-loop.gif" alt="Drawing a path on the chart, scanning it, and getting deployable setups back" width="900">
 
 </div>
 
@@ -53,6 +52,11 @@ def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFram
 
 **4. It runs.** Live PnL, an auto-stop timer if the edge is time-boxed, and an inbox
 that tells you when something happened.
+
+<img src="docs/media/terminal.png" alt="The terminal with a setup plotted on the chart and two ranked plans in the sidebar" width="900">
+
+*The plan is not just text — entry, stop and target are drawn on the chart you are
+looking at, and every card carries its own reasoning, R multiple and confidence tier.*
 
 ## What actually stops you losing money
 
