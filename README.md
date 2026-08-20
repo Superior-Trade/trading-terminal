@@ -1,197 +1,174 @@
 <div align="center">
 
-<img src="public/logo-dark.png" alt="Trading Terminal" width="320">
+<img src="public/logo-dark.png" alt="Trading Terminal" width="300">
 
-# Trading Terminal
+### Draw on the chart. Describe the idea. Get a bot that trades it.
 
-**Draw on the chart. Describe the idea. Get a strategy you can actually run.**
-
-An AI trading terminal you host yourself. It reads your chart, turns a plain-language
-thesis into a real Freqtrade strategy, backtests it, and deploys it live on Hyperliquid.
+A self-hosted AI trading terminal for Hyperliquid. You mark up a chart and say what you
+think; it writes a real Freqtrade strategy, refuses to ship the unsafe ones, backtests
+it, and runs it live.
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A520.9-brightgreen.svg)](https://nodejs.org)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black.svg)](https://nextjs.org)
 
+<!-- SCREENSHOT GOES HERE — chart with a drawn setup, chat open, running setups in the
+     sidebar. See docs/screenshots/README.md for what to capture and how. -->
+
 </div>
 
 ---
 
-## What it does
+## The loop
 
-You mark up a chart the way you already do — a level, a zone, a trendline — and say what
-you think. The agent takes it from there:
+**1. You draw a level and ask.**
 
-- **Reads the chart you are looking at.** Your drawings, the visible range, the
-  indicators you have plotted, and a screenshot go to the model with your message.
-- **Finds setups.** Scan the chart and get structured plans back: entry, stop,
-  target, invalidation, and the reasoning that produced them.
-- **Writes the strategy.** Plain language in, a real Freqtrade strategy out —
-  validated, checked for lookahead bias, and smoke-run against candles before it is
-  allowed anywhere near your money.
-- **Backtests it.** On real historical data, before you risk anything.
-- **Deploys it live** on Hyperliquid, with position sizing, leverage, bracket orders
-  and time-boxed auto-stops.
-- **Watches it.** Live PnL, order flow, liquidation heatmaps, and an inbox that tells
-  you when something happened.
-- **Moves the money.** Deposit USDC into trading, shuffle it between accounts, and
-  withdraw it back out — see [docs/withdrawals.md](docs/withdrawals.md) for how far
-  that last one goes.
+> *"HYPE keeps rejecting off this line. Is there a mean-reversion trade here on the 15m?"*
 
-Everything runs on your machine. The only things that leave it are the API calls you
-configure.
+**2. The agent reads your actual chart** — your drawings, the visible range, the
+indicators you have plotted, and a screenshot of it — and answers with a plan:
 
-## Quick start
+| | |
+|---|---|
+| Entry | 38.20 — close crossing back above the band |
+| Stop | 36.90 *(−3.4%)* |
+| Target | 41.05 *(+7.5%)* |
+| Invalidation | 15m close below 36.50 |
 
-You need **two keys** and nothing else:
+**3. You say deploy.** It writes the strategy, and the validator reads it before
+anything else does:
 
-| Key | What it is | Where |
-| --- | --- | --- |
-| `SUPERIOR_TRADE_API_KEY` | Runs backtests and live strategies | [superior.trade](https://superior.trade) → Account → API keys |
-| `OPENROUTER_API_KEY` | Powers the agent | [openrouter.ai/keys](https://openrouter.ai/keys) |
+```python
+def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+    dataframe.loc[
+        (
+            (dataframe['volume'] > 0) &                      # no signals on dead candles
+            (dataframe['close'] < dataframe['bb_lower']) &
+            (dataframe['rsi'] < 40) &
+            (dataframe['close'] > dataframe['ema_50'])
+        ),
+        'enter_long'
+    ] = 1
+```
+
+**4. It runs.** Live PnL, an auto-stop timer if the edge is time-boxed, and an inbox
+that tells you when something happened.
+
+## What actually stops you losing money
+
+The interesting part of this repo is not that a model writes Python. It is what happens
+between "the model wrote it" and "it is trading your funds".
+
+Every generated strategy is parsed and checked before it can be submitted. A failure
+does not surface as a stack trace — the complaints go back to the model, which rewrites
+the strategy, and the loop repeats. A few of the rules, in the validator's own words:
+
+- `code uses shift(-N) — that reads FUTURE candles (lookahead bias); backtests lie and live behaves differently`
+- `config.stoploss must be negative — freqtrade stops are always negative, for shorts too`
+- `trailing_stop_positive ... at 10x looks unscaled (it is leveraged PnL, like stoploss) — multiply the price % by leverage`
+- `entry conditions must include the (dataframe['volume'] > 0) guard so signals never fire on dead candles`
+- `startup_candle_count is too low — use ≥ 3× the longest indicator lookback`
+- `code uses .iloc[...] inside populate_* — per-row indexing behaves differently live vs backtest`
+
+Most of these came from strategies that reached production and cost real money. Each one
+is a scar. [docs/strategy-pipeline.md](docs/strategy-pipeline.md) has the full set and
+explains the repair loop.
+
+## Features
+
+| | |
+|---|---|
+| **Chart** | TradingView Advanced Charts, Hyperliquid + Lighter datafeeds, order-flow footprint, liquidation heatmap, tier-ranked indicators |
+| **Agent** | Reads your drawings and a screenshot of the chart; draws back — levels, zones, trendlines, channels, fibs |
+| **Setups** | Scan a chart for plans, or design one in conversation. Entry, stop, target, invalidation, confidence tier |
+| **Strategies** | Freqtrade code generation, deterministic safety validation, automatic repair, historical backtests |
+| **Execution** | Live deployments, bracket orders for one-shot plans, position sizing, leverage caps, time-boxed auto-stop |
+| **Funds** | Deposit, transfer between accounts, consolidate idle wallets, withdraw ([one hop](docs/withdrawals.md)) |
+| **Local** | Embedded Postgres, no login, no telemetry unless you turn it on |
+
+## Setup
+
+**Two keys.** Nothing else to sign up for.
 
 ```bash
 git clone https://github.com/Superior-Trade/trading-terminal.git
 cd trading-terminal
 npm install
-
-cp .env.example .env.local     # then fill in the two keys above
-
-npm run setup:charts           # see "The chart library" below
-npm run dev
+cp .env.example .env.local     # add the two keys below
+npm run setup:charts           # TradingView — see the note
+npm run dev                    # → http://localhost:3200
 ```
 
-Open <http://localhost:3200>.
+| | Where |
+|---|---|
+| `SUPERIOR_TRADE_API_KEY` | [superior.trade](https://superior.trade) → Account → API keys |
+| `OPENROUTER_API_KEY` | [openrouter.ai/keys](https://openrouter.ai/keys) |
 
-There is no database to provision, no account to create and no login screen. The
-terminal runs an embedded Postgres out of `./.data/` and treats you as the only user.
+No database to provision, no account to create, no login screen. An embedded Postgres
+writes to `./.data/` and migrates itself on first boot.
 
-### The chart library
+`.env.example` documents 38 variables. Those two are the only ones without a working
+default.
 
-The chart is the one part of this terminal we are not allowed to ship. It is
-TradingView's [Advanced Charts](https://www.tradingview.com/advanced-charts/), which
-they license to you directly — free — but which nobody may redistribute.
+> [!IMPORTANT]
+> **The chart needs TradingView's approval, and that takes a day or two.**
+> Advanced Charts is free but not redistributable, so we cannot ship it. Apply at
+> [tradingview.com/advanced-charts](https://www.tradingview.com/advanced-charts/); once
+> your GitHub account is granted the repository, `npm run setup:charts` pulls it in.
+> Until then the build stops with instructions. See
+> [docs/charting-library.md](docs/charting-library.md).
 
-Request access (it usually takes a day or two), and once your GitHub account is granted
-the repository:
+## Money
 
-```bash
-npm run setup:charts
-```
+This places real orders with real funds by design.
 
-That clones it into `public/static/`, where the build expects it. See
-[docs/charting-library.md](docs/charting-library.md) for the manual route and for what
-to do when the clone fails.
+- **Read the strategies before you deploy them.** The validator catches the mistakes we
+  know about, not the ones we don't.
+- **Start on testnet** (`NEXT_PUBLIC_HL_NETWORK=testnet`) or with an amount you would
+  shrug at.
+- **A backtest is not a prediction.** Neither is the agent's reasoning.
+- **There is no login** — anyone who can reach the port can trade with your key. Fine on
+  localhost, dangerous anywhere else. See [SECURITY.md](SECURITY.md).
 
-## How it fits together
+Not investment advice. No promise of profit. You are responsible for what you run.
 
-```
-   your browser
-        │
-        │  chart, drawings, chat
-        ▼
-   Next.js app  ──────────────►  OpenRouter        the agent
-        │                        (your key)
-        │
-        ├──────────────────────►  Superior Trade API   backtests, live deployments,
-        │                         (your key)           accounts, funding
-        │
-        ├──────────────────────►  Hyperliquid          prices, candles, positions
-        │                         (public)
-        │
-        └──────────────────────►  embedded Postgres    conversations, plans, order flow
-                                  (./.data)
-```
+## Documentation
 
-The Next.js app in this repository is the whole of what you run. It holds your keys
-server-side, talks to the three services above, and serves the terminal.
-
-The Superior Trade API is a hosted service, not part of this repository and not
-something you stand up yourself: strategies do not execute in this process, they are
-deployed to that API, which runs them as live bots against your account. All you supply
-is the key.
-
-## Configuration
-
-`.env.example` documents every variable. The ones worth knowing about:
-
-| Variable | Default | Notes |
-| --- | --- | --- |
-| `SUPERIOR_TRADE_API_KEY` | — | Required. |
-| `OPENROUTER_API_KEY` | — | Required. |
-| `AGENT_MODEL`, `DETECT_MODEL` | compiled-in | Override to trade cost against quality. |
-| `DATABASE_URL` | unset | Unset runs the embedded database. Any Postgres URL works; a `*.neon.tech` host uses Neon's HTTP driver. |
-| `NEXT_PUBLIC_HL_NETWORK` | `mainnet` | `testnet` to trade paper. |
-| `POSTHOG_KEY`, `SENTRY_DSN`, `NEXT_PUBLIC_GA_ID` | unset | All analytics and error reporting are off unless you switch them on. |
-
-### There is no login
-
-The terminal is single-operator by design. It holds your API key, and every request it
-serves is you — asking you to authenticate to your own computer would add a password
-without adding a guarantee.
-
-The practical consequence: **anyone who can reach the port is you.** Keep it on
-localhost or behind something that does authentication for you. Do not put it on a
-public address as-is.
-
-## Deploying
-
-Any host that runs a Next.js app works — Vercel, Fly, Railway, a container, your own box:
-
-```bash
-npm run build
-npm start
-```
-
-Three things to get right when it is not on your laptop:
-
-- **Put authentication in front of it.** There is none built in, and the app can move
-  funds. A reverse proxy with basic auth, a VPN, or an SSH tunnel — any of them, but not
-  nothing.
-- Set `DATABASE_URL`. The embedded database lives on local disk, which serverless
-  platforms do not keep between deploys.
-- Point a scheduler at `/api/cron/one-shot-sweep` every minute, with
-  `Authorization: Bearer $CRON_SECRET`. It stops one-shot strategies once their trade
-  has closed. Skipping it only affects one-shot plans.
+| | |
+|---|---|
+| [docs/architecture.md](docs/architecture.md) | How a sentence becomes a running bot |
+| [docs/strategy-pipeline.md](docs/strategy-pipeline.md) | Generation, validation, repair, logging |
+| [docs/charting-library.md](docs/charting-library.md) | Installing TradingView Advanced Charts |
+| [docs/withdrawals.md](docs/withdrawals.md) | How money gets out, and how far this repo takes it |
+| [docs/bracket-orders.md](docs/bracket-orders.md) | One-shot plans as native exchange orders |
+| [docs/self-hosting.md](docs/self-hosting.md) | Configuration, databases, running it somewhere else |
 
 ## Development
 
 ```bash
 npm run dev           # dev server on :3200
-npm test              # vitest
-npm run check-types   # tsc --noEmit
-npm run lint          # eslint
-npm run db:generate   # create a migration after editing lib/db/schema.ts
+npm test              # unit tests
+npm run test:e2e      # 19 checks against a running server, nothing mocked
+npm run check-types
+npm run lint
 ```
 
-With the dev server running, `node evals/e2e.mjs` drives the whole app end to end —
-boot, database, the Superior Trade API, market data and real model calls — against no
-mocks at all. It never spends money: deploying and withdrawing are the two irreversible
-actions and it stops short of both.
+`npm run test:e2e` drives the whole app — boot, database, the Superior Trade API, market
+data, real model calls. It never spends money: deploying and withdrawing are the two
+irreversible actions and it stops short of both.
 
-`evals/` also holds the agent evaluations — behaviour suites, tool-use cases and
-full-flow runs. They are how changes to the prompts get judged.
-
-Design notes for the trickier subsystems are in [`docs/`](docs).
-
-## Money, and the honest part
-
-This software places real orders with real money by design. Read the strategies it
-writes before you deploy them. Start on `testnet`, or with an amount you would shrug at.
-
-It is not investment advice, it makes no promise of profit, and neither the agent's
-reasoning nor its backtests predict the future. You are responsible for what you run.
-
-See [SECURITY.md](SECURITY.md) for how to report a vulnerability.
+`evals/` holds the agent evaluations. Prompt changes get judged there, not by vibes —
+see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Contributing
 
-Issues and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+Issues and pull requests welcome — [CONTRIBUTING.md](CONTRIBUTING.md). The code that
+moves money gets read closely; bring a test.
 
 ## License
 
 [Apache-2.0](LICENSE) © Superior Trade.
 
-TradingView's Advanced Charts is licensed separately by TradingView and is not covered
-by this license or included in this repository. Third-party notices are in
-[NOTICE](NOTICE).
+The Superior Trade API is a hosted service and is not part of this repository.
+TradingView's Advanced Charts is licensed separately by TradingView and is not included.
+Third-party notices: [NOTICE](NOTICE).

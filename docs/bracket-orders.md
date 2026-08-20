@@ -1,96 +1,72 @@
-# Bracket orders — lightweight one-shot execution (design + prod findings)
+# Bracket orders
 
-_2026-07-10. Status: pipeline verified on prod; sub-account path blocked by an
-exchange gate; recommendation below._
+Not every plan needs a bot.
 
-## Goal
+A `one_shot` plan with a **fixed entry price** has a lifecycle that native exchange orders
+already express: enter, then take profit or stop out, then done. Running a Freqtrade pod
+to wait for a limit fill is a container's worth of infrastructure doing a resting order's
+job.
 
-A `one_shot` plan with a **fixed entry price** doesn't need a Freqtrade pod.
-Its whole lifecycle is expressible as native exchange orders — a **bracket**:
+So the terminal routes those to a **bracket** instead: three orders placed atomically.
 
 ```
 entry (limit, GTC)  +  take-profit (trigger, reduce-only)  +  stop-loss (trigger, reduce-only)
 ```
 
-Hyperliquid supports this atomically: one `order` action with three orders and
-`grouping: "normalTpsl"` — TP/SL park until the entry fills, then arm as an
-OCO pair. No pod cost, instant placement, survives infra restarts. Conditional
-(indicator-gated) entries stay on Freqtrade; this only replaces the
-fixed-price subset — exactly the `entrySource: fixed ⇒ one_shot` class.
+Hyperliquid places these as one `order` action with `grouping: "normalTpsl"`. The TP and
+SL park until the entry fills, then arm as an OCO pair — whichever fires first cancels the
+other. No pod to run, instant placement, and it survives infrastructure restarts because
+the exchange is holding the orders, not us.
 
-## What exists in the prod API today (verified live 2026-07-10)
+## Which plans route this way
 
-`POST /v2/authorize-and-send/hyperliquid` (PR #591, deployed):
+| Plan | Engine | Why |
+|---|---|---|
+| `one_shot` with a fixed entry price | **Bracket** | The exchange can express it natively |
+| `one_shot` gated on an indicator | Freqtrade | Something has to evaluate the condition each candle |
+| `recurring` | Freqtrade | Re-enters whenever the condition triggers again |
 
-- Whitelisted actions: `createSubAccount`, `subAccountModify`,
-  `subAccountTransfer`, `sendAsset`, `userSetAbstraction`, `order`, `cancel`.
-- Signs with the authenticated user's **main wallet** key server-side.
-- `order`/`cancel` REQUIRE `vaultAddress` = an owned **sub-account**;
-  master-account orders are rejected by design.
-- **Verified end-to-end**: an authenticated `createSubAccount` request flowed
-  through auth → server-side signing → Hyperliquid and returned HL's own
-  response. The pipeline works.
+The deploy button routes automatically — `lib/setups-context.tsx` checks `mode` and
+whether the entry is a fixed price. The confirmation step names the engine, because the
+two behave differently and you should know which one you are getting.
 
-## The blocker: HL's sub-account volume gate
+## The API
 
-Hyperliquid refuses sub-account creation until the master account has
-**$100,000 lifetime traded volume**:
+Brackets are placed through the Superior Trade API, which holds the trading wallet's key
+and signs server-side — the same infrastructure that runs Freqtrade deployments.
 
-```
-"Cannot create sub-accounts until enough volume traded.
- Required: $100000. Traded: $8277.07."
-```
+| | |
+|---|---|
+| `POST /v2/bracket` | `{ pair, side, entry, take_profit, stop_loss, size_usd, leverage, alive_until?, name? }` |
+| `GET /v2/bracket` | List, with status |
+| `DELETE /v2/bracket/:id` | Cancel the group, close any position, free the wallet |
 
-Also verified: none of the existing trading wallets (Main Account 1,
-Trading Account 2/3) are HL sub-accounts — they're independent wallets from
-Superior's per-deployment provisioning, so they can't be `vaultAddress`
-targets either.
+Wrapped in `lib/superior-api.ts` as `placeBracket`, `listBrackets`, `cancelBracket`; the
+terminal's own proxy is `app/api/bracket/route.ts`.
 
-**Product decision (2026-07-10):** sub-accounts are OFF the table entirely —
-Superior's concurrency model is **multiple trading accounts** (Trading
-Account 2/3 …), one active execution per wallet. That also sidesteps the
-volume gate completely, but it means authorize-and-send's `order`/`cancel`
-path (sub-account-only by design) is simply not the bracket vehicle.
+## Rules that are easy to get wrong
 
-## Recommendation: Superior-side bracket on TRADING ACCOUNTS
+**One execution per wallet.** A bracket occupies a trading wallet exactly like a
+deployment does. A wallet running a bot rejects a bracket and vice versa; deleting frees
+it. This is why the deploy path sweeps for a free account and why teardown is
+deployment-scoped rather than wallet-scoped — a wallet-wide "cancel everything" would kill
+an unrelated bracket sharing that wallet.
 
-Superior provisions the trading-account wallets and signs for them (that's
-how Freqtrade bots trade on them today). Brackets should be a first-class
-upstream endpoint reusing that signing infra, targeting the same wallets:
+**Leverage is set before entry, not with it.** It is a separate exchange call against the
+wallet's own key, done server-side.
 
-```
-POST /v2/bracket
-{ pair, side, entry, take_profit, stop_loss, size_usd, leverage,
-  alive_until?, account_address? }
-→ picks (or takes account_address) a FREE trading account — one active
-  execution per wallet, exactly the deployment rule — sets leverage,
-  places the normalTpsl group with that wallet's key,
-  returns { id, wallet_address, order_ids }
+**`alive_until` mirrors deployments.** A time-boxed plan auto-cancels at that instant, and
+closes the position if the entry has already filled. Use it when the edge itself expires —
+a funding window, a session, an event — and not for a swing thesis with no clock on it.
 
-GET  /v2/bracket/:id      → status (resting | active | tp_filled | sl_filled | cancelled)
-DELETE /v2/bracket/:id    → cancel group / close position, free the wallet
-```
+**Running setups render brackets alongside deployments.** They are the same thing to the
+user: a plan that is live. The list is ordered by time, not by engine — see
+`lib/setup-order.ts`, which exists because sorting by type first put a week-old bot above
+a bracket placed a minute ago.
 
-Notes for the API team:
-- Trading accounts are masters trading for themselves — no HL volume gate.
-- Leverage must be set before entry (`updateLeverage` with the wallet's own
-  key — not exposed through authorize-and-send today, fine server-side).
-- Wallet-busy semantics identical to deployments (a wallet running a bot or
-  a bracket rejects a second execution; deleting frees it).
-- `alive_until` semantics can mirror deployments (auto-cancel/close at T).
+## Related
 
-## terminal-v2 integration (once the endpoint exists)
-
-- Deploy button auto-routes: `mode === "one_shot"` && fixed entry → bracket;
-  everything else → Freqtrade. Copy on the confirm step says which engine.
-- Running Setups renders brackets with the existing LiveRows
-  (positions/open-orders per wallet) — no new visualization needed.
-- One-active-per-wallet rule unchanged.
-- Analytics: `bracket_placed` / `bracket_filled` / `bracket_cancelled` in
-  the 4-trading funnel stage.
-
-## Fallback if upstream says no
-
-Gate the sub-account path client-side: offer brackets only when
-`subAccounts` exist or volume ≥ $100k, with a clear explainer. Not
-recommended as the primary path (excludes most users).
+- `app/api/bracket/route.ts` — the proxy, with the funding checks
+- `lib/setups-context.tsx` — routing, and the client-side plan store
+- `lib/setup-order.ts` — merging both kinds into one timeline
+- [architecture.md](architecture.md) — where execution sits in the whole
