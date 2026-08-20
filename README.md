@@ -103,9 +103,13 @@ to do when the clone fails.
                                   (./.data)
 ```
 
-The Next.js app is the whole product. It holds your keys server-side, talks to the three
-services above, and serves the terminal. Strategies do not execute in this process —
-they are deployed to the Superior Trade API, which runs them as live bots.
+The Next.js app in this repository is the whole of what you run. It holds your keys
+server-side, talks to the three services above, and serves the terminal.
+
+The Superior Trade API is a hosted service, not part of this repository and not
+something you stand up yourself: strategies do not execute in this process, they are
+deployed to that API, which runs them as live bots against your account. All you supply
+is the key.
 
 ## Configuration
 
@@ -160,8 +164,13 @@ npm run lint          # eslint
 npm run db:generate   # create a migration after editing lib/db/schema.ts
 ```
 
-`evals/` holds the agent evaluations — behaviour suites, tool-use cases, and full-flow
-runs against a live dev server. They are how changes to the prompts get judged.
+With the dev server running, `node evals/e2e.mjs` drives the whole app end to end —
+boot, database, the Superior Trade API, market data and real model calls — against no
+mocks at all. It never spends money: deploying and withdrawing are the two irreversible
+actions and it stops short of both.
+
+`evals/` also holds the agent evaluations — behaviour suites, tool-use cases and
+full-flow runs. They are how changes to the prompts get judged.
 
 Design notes for the trickier subsystems are in [`docs/`](docs).
 
