@@ -7,10 +7,6 @@ so it cannot live in this repository. You have to fetch your own copy once.
 Everything else in the terminal is here. This is the only missing piece, and the build
 stops with an explanatory error until you install it.
 
-If you only want to *use* the terminal rather than run your own copy,
-[terminal.superior.trade](https://terminal.superior.trade) is already licensed and needs
-none of this.
-
 ## 1. Get access
 
 Apply at <https://www.tradingview.com/advanced-charts/>. You give them a GitHub

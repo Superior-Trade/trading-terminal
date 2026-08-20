@@ -28,7 +28,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "test:e2e": "node evals/e2e.mjs",
-    "preview": "node scripts/preview-readme.mjs"
+    "preview": "node scripts/preview-readme.mjs",
+    "screenshot": "node scripts/screenshot.mjs"
   },
   "dependencies": {
     "@ai-sdk/react": "^4.0.16",
@@ -58,6 +59,7 @@
     "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "playwright": "^1.62.1",
     "tailwindcss": "^4",
     "typescript": "^5.9",
     "vitest": "^3.2.6"

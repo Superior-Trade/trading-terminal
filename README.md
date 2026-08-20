@@ -8,10 +8,9 @@ An AI trading terminal for Hyperliquid. You mark up a chart and say what you thi
 writes a real Freqtrade strategy, refuses to ship the unsafe ones, backtests it, and runs
 it live.
 
-**[→ Open the terminal at terminal.superior.trade](https://terminal.superior.trade)**
-&nbsp;&nbsp;·&nbsp;&nbsp; hosted, nothing to install
+Run it yourself, or use the hosted build at
+[terminal.superior.trade](https://terminal.superior.trade).
 
-[![Live](https://img.shields.io/badge/try_it-terminal.superior.trade-a3e635?style=flat-square)](https://terminal.superior.trade)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg?style=flat-square)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A520.9-brightgreen.svg?style=flat-square)](https://nodejs.org)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black.svg?style=flat-square)](https://nextjs.org)
@@ -59,48 +58,20 @@ def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFram
 **4. It runs.** Live PnL, an auto-stop timer if the edge is time-boxed, and an inbox
 that tells you when something happened.
 
-<img src="docs/media/setup-on-chart.png" alt="The chosen setup drawn on the chart as entry, stop and target lines, with two ranked plans in the sidebar" width="900">
-
 *The plan is not just text — entry, stop and target are drawn on the chart you are
 looking at, and every card carries its own reasoning, R multiple and confidence tier.*
 
-## Two ways to use it
+## Hosted or self-hosted
 
-**Most people want the first one.**
+The hosted build at [terminal.superior.trade](https://terminal.superior.trade) is this
+repository with a login in front of it. Both talk to the same
+[Superior Trade API](https://api.superior.trade/docs) and trade the same accounts, so the
+choice is about who runs the process, not about what you get.
 
-<table>
-<tr>
-<th width="50%">Hosted — <a href="https://terminal.superior.trade">terminal.superior.trade</a></th>
-<th width="50%">This repository</th>
-</tr>
-<tr valign="top">
-<td>
-
-Sign in and trade. No install, no keys to manage, no waiting on anyone.
-
-- Nothing to set up — the chart is already there
-- Managed accounts, deposits and full withdrawals
-- Always the current version
-
-</td>
-<td>
-
-Run it on your own machine, read every line, change whatever you like.
-
-- Your keys, your machine, your data
-- Modify the agent, the prompts, the safety rules
-- Needs your own TradingView access ([a day or two](docs/charting-library.md))
-
-</td>
-</tr>
-<tr>
-<td align="center"><b><a href="https://terminal.superior.trade">Open the terminal →</a></b></td>
-<td align="center"><b><a href="#run-it-yourself">Run it yourself ↓</a></b></td>
-</tr>
-</table>
-
-Both talk to the same [Superior Trade API](https://api.superior.trade/docs) and trade the
-same accounts. The hosted app is this code with a login in front of it.
+Running your own copy means your keys stay on your machine and every prompt and safety
+rule is yours to change. It also means no login (see [SECURITY.md](SECURITY.md)),
+withdrawals that stop one hop short (see [docs/withdrawals.md](docs/withdrawals.md)), and
+getting your own TradingView access before the chart will build.
 
 ## What actually stops you losing money
 
@@ -144,9 +115,6 @@ wallet; the final hop to a wallet you hold the keys for needs a signed-in sessio
 
 ## Run it yourself
 
-Only if you want to. [terminal.superior.trade](https://terminal.superior.trade) is the
-same terminal with none of this.
-
 **Two keys.** Nothing else to sign up for.
 
 ```bash
@@ -176,10 +144,6 @@ default.
 > your GitHub account is granted the repository, `npm run setup:charts` pulls it in.
 > Until then the build stops with instructions. See
 > [docs/charting-library.md](docs/charting-library.md).
->
-> The hosted terminal has no such wait — it is already licensed.
-> [Open it now](https://terminal.superior.trade) and come back to this when you want the
-> code.
 
 ## Money
 
@@ -230,8 +194,7 @@ see [CONTRIBUTING.md](CONTRIBUTING.md).
 Issues and pull requests welcome — [CONTRIBUTING.md](CONTRIBUTING.md). The code that
 moves money gets read closely; bring a test.
 
-Everything merged here ships to [terminal.superior.trade](https://terminal.superior.trade)
-as well — the hosted terminal runs this repository.
+What merges here also ships to the hosted build — it runs this repository.
 
 ## License
 
