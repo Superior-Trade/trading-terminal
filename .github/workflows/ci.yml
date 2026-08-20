@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Tests
+        run: npm test
+
+      # TradingView's Advanced Charts cannot be redistributed, so CI has no copy
+      # of it (see docs/charting-library.md). Typecheck everything that does not
+      # depend on it; components/chart/** is covered by tests and by review.
+      - name: Typecheck
+        run: npx tsc --noEmit 2>&1 | tee /tmp/tsc.log || true
+
+      - name: Fail on type errors outside the chart integration
+        run: |
+          if grep -v -E '^components/chart/|charting_library' /tmp/tsc.log | grep -q 'error TS'; then
+            echo "::error::type errors outside components/chart"
+            grep -v -E '^components/chart/|charting_library' /tmp/tsc.log | grep 'error TS'
+            exit 1
+          fi
+          echo "no type errors outside the chart integration"
+
+      - name: Lint
+        run: npm run lint

@@ -1,0 +1,23 @@
+# deps / build
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# env (keep the example tracked)
+.env*
+!.env.example
+
+# embedded database
+.data/
+
+# TradingView Advanced Charts — licensed to you directly by TradingView and
+# not redistributable, so it is never committed. See docs/charting-library.md.
+public/static/charting_library/
+public/static/datafeeds/
+
+# editors / OS
+.DS_Store
+.idea/
+.vscode/

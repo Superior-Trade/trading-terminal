@@ -1,0 +1,636 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand: #a3e635;
+  --color-ink: #0a0a0a;
+  --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-space-mono), ui-monospace, SFMono-Regular, monospace;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Light theme: real surface remapping (no filter inversion). The chart
+   re-themes natively via the TradingView light palette; the UI chrome
+   remaps its dark-mode utility classes below. */
+:root {
+  --app-bg: #000;
+  --glass-fill: rgba(0, 0, 0, 0.35);
+  --glass-strong-fill: rgba(8, 10, 6, 0.45);
+  --pill-fill: rgba(0, 0, 0, 0.22);
+  /* dropdowns: translucent but darker than panels, blurred inline */
+  --menu-fill: rgba(8, 10, 6, 0.78);
+}
+html.light {
+  /* GitHub Light: canvas #ffffff, canvas.subtle #f6f8fa, border #d0d7de */
+  --app-bg: #ffffff;
+  --glass-fill: rgba(246, 248, 250, 0.85);
+  --glass-strong-fill: rgba(246, 248, 250, 0.92);
+  --pill-fill: rgba(246, 248, 250, 0.9);
+  --menu-fill: rgba(255, 255, 255, 0.97);
+  /* GitHub-Light green accent. The lime ramp INVERTS for a light theme:
+     50 = dark text, 950 = light surface, mid shades = the accent green. */
+  --color-lime-50: #052e16;
+  --color-lime-200: #1a7f37;
+  --color-lime-300: #1a7f37;
+  --color-lime-400: #1a7f37;
+  --color-lime-950: #dafbe1;
+}
+html.light body {
+  background: #ffffff;
+  color: #1f2328;
+}
+
+/* Text (GitHub fg.default #1f2328, fg.muted #656d76) */
+html.light .text-white { color: #1f2328; }
+html.light [class*="text-white/9"] { color: rgba(31, 35, 40, 0.95); }
+html.light [class*="text-white/8"] { color: rgba(31, 35, 40, 0.88); }
+html.light [class*="text-white/7"] { color: rgba(31, 35, 40, 0.72); }
+html.light [class*="text-white/6"] { color: #656d76; }
+html.light [class*="text-white/5"] { color: rgba(101, 109, 118, 0.9); }
+html.light [class*="text-white/4"] { color: rgba(101, 109, 118, 0.78); }
+html.light [class*="text-white/3"] { color: rgba(101, 109, 118, 0.62); }
+html.light .placeholder\:text-white\/40::placeholder { color: rgba(101, 109, 118, 0.7); }
+
+/* Dark surfaces become GitHub canvas-subtle panels */
+html.light .bg-black\/40 { background-color: rgba(246, 248, 250, 0.7); }
+html.light .bg-black\/50 { background-color: rgba(246, 248, 250, 0.8); }
+html.light .bg-black\/55 { background-color: rgba(246, 248, 250, 0.85); }
+html.light .bg-black\/60 { background-color: rgba(246, 248, 250, 0.9); }
+html.light .bg-black\/70 { background-color: #f6f8fa; }
+html.light .bg-black\/75 { background-color: #f6f8fa; }
+html.light .bg-black\/80 { background-color: #ffffff; }
+html.light .bg-black\/90 { background-color: #ffffff; }
+
+/* White-tint chips/buttons become subtle grey */
+html.light [class*="bg-white/"] { background-color: rgba(0, 0, 0, 0.04); }
+html.light .hover\:bg-white\/10:hover,
+html.light .hover\:bg-white\/20:hover,
+html.light [class*="hover:bg-white/"]:hover { background-color: rgba(0, 0, 0, 0.07); }
+
+/* Borders → GitHub border.default */
+html.light [class*="border-white/"] { border-color: #d0d7de; }
+
+/* Red / amber stay readable on white */
+html.light .text-red-300, html.light [class*="text-red-300/"] { color: #cf222e; }
+html.light .text-red-400 { color: #cf222e; }
+html.light .text-amber-300 { color: #9a6700; }
+
+/* Glass ring flips to a dark ring */
+html.light .liquid-glass::before,
+html.light .liquid-glass-strong::before {
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.25) 0%,
+    rgba(0, 0, 0, 0.08) 20%,
+    rgba(0, 0, 0, 0) 40%,
+    rgba(0, 0, 0, 0) 60%,
+    rgba(0, 0, 0, 0.08) 80%,
+    rgba(0, 0, 0, 0.25) 100%
+  );
+}
+html.light .liquid-glass,
+html.light .liquid-glass-strong {
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.6);
+}
+
+/* Scrollbar */
+html.light ::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.25); }
+html.light * { scrollbar-color: rgba(0, 0, 0, 0.25) transparent; }
+
+body {
+  background: #000;
+  color: #fff;
+  font-family: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
+  overflow: hidden;
+}
+
+/* ── Liquid glass (ported from home-v2-next) ─────────────────────────── */
+
+.liquid-glass {
+  background: rgba(255, 255, 255, 0.01);
+  background-blend-mode: luminosity;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: none;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+.liquid-glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.4px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.45) 0%,
+    rgba(255, 255, 255, 0.15) 20%,
+    rgba(255, 255, 255, 0) 40%,
+    rgba(255, 255, 255, 0) 60%,
+    rgba(255, 255, 255, 0.15) 80%,
+    rgba(255, 255, 255, 0.45) 100%
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.liquid-glass-strong {
+  background: rgba(255, 255, 255, 0.01);
+  background-blend-mode: luminosity;
+  backdrop-filter: blur(50px);
+  -webkit-backdrop-filter: blur(50px);
+  border: none;
+  box-shadow: 4px 4px 4px rgba(0, 0, 0, 0.05),
+    inset 0 1px 1px rgba(255, 255, 255, 0.15);
+  position: relative;
+  overflow: hidden;
+}
+
+.liquid-glass-strong::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.4px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.5) 0%,
+    rgba(255, 255, 255, 0.2) 20%,
+    rgba(255, 255, 255, 0) 40%,
+    rgba(255, 255, 255, 0) 60%,
+    rgba(255, 255, 255, 0.2) 80%,
+    rgba(255, 255, 255, 0.5) 100%
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.card-glass {
+  transition: backdrop-filter 350ms ease, -webkit-backdrop-filter 350ms ease,
+    box-shadow 350ms ease;
+}
+.card-glass:hover {
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+}
+
+.noise-overlay::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  mix-blend-mode: soft-light;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 1 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  background-size: 240px 240px;
+}
+
+/* ── Scrollbar ───────────────────────────────────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+/* ── Chart loading shimmer ───────────────────────────────────────────── */
+
+@keyframes tvShimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* ── Voice button pulse ──────────────────────────────────────────────── */
+
+@keyframes voicePulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(163, 230, 53, 0.35);
+  }
+  70% {
+    box-shadow: 0 0 0 12px rgba(163, 230, 53, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(163, 230, 53, 0);
+  }
+}
+.voice-recording {
+  animation: voicePulse 1.6s ease-out infinite;
+}
+
+/* ── Voice mode (persistent listening session) ─────────────────────────
+   Concentric ripple rings around the mic + the button itself breathes
+   with mic amplitude via --voice-level (0..1, set from an AnalyserNode
+   rAF loop — no React re-renders). */
+.cg-voice-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 2px solid rgba(163, 230, 53, 0.55);
+  pointer-events: none;
+  animation: cg-voice-ripple 1.8s cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
+}
+.cg-voice-ring--late {
+  animation-delay: 0.9s;
+}
+@keyframes cg-voice-ripple {
+  /* Max scale stays INSIDE the input bar — the liquid-glass container has
+     overflow:hidden and the mic sits at its right edge, so a bigger ripple
+     gets visibly clipped on that side. */
+  0% { transform: scale(0.9); opacity: 0.85; }
+  100% { transform: scale(1.4); opacity: 0; }
+}
+.cg-voice-live {
+  transform: scale(calc(1 + var(--voice-level, 0) * 0.12));
+  transition: transform 90ms linear;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cg-voice-ring { animation: none; opacity: 0.45; transform: scale(1.3); }
+  .cg-voice-live { transform: none; }
+}
+
+/* ── Sizing sliders (funds / leverage) ──────────────────────────────────
+   White fill + white knob on an 8px translucent track. Fill percentage is
+   painted via an inline --fill custom property from the component. */
+.cg-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0.92) 0%,
+    rgba(255, 255, 255, 0.92) var(--fill, 0%),
+    rgba(255, 255, 255, 0.12) var(--fill, 0%),
+    rgba(255, 255, 255, 0.12) 100%
+  );
+  outline: none;
+  cursor: pointer;
+}
+/* Knobless: the white fill edge IS the indicator. Thumb keeps a 16px
+   invisible hit target so dragging still works. */
+.cg-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+.cg-range::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+.cg-range:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* Tailwind v4 removed the default button cursor:pointer — restore it for
+   all enabled interactive controls so hover reads as clickable. */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+label[for],
+summary,
+a[href] {
+  cursor: pointer;
+}
+button:disabled,
+[role="button"][aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+/* ── Theme-swapped brand mark (v3 logo pair) ─────────────────────────────
+   html.light picks the light asset; default (dark) shows the dark asset. */
+.logo-v3-light {
+  display: none;
+}
+html.light .logo-v3-light {
+  display: block;
+}
+html.light .logo-v3-dark {
+  display: none;
+}
+
+/* ── Privy login dialog → liquid glass ───────────────────────────────────
+   Privy renders in normal DOM: #privy-dialog-backdrop (overlay) and
+   #privy-modal-content (panel, painted with var(--privy-color-background),
+   which nested screens inherit). Overriding that var to a translucent fill
+   + adding backdrop-filter glassifies every screen of the flow. ID
+   selectors outrank Privy's styled-components classes. */
+
+#privy-dialog-backdrop {
+  background: rgba(0, 0, 0, 0.45) !important;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+#privy-modal-content {
+  --privy-color-background: rgba(10, 12, 8, 0.62);
+  /* Text + chip colors to match the terminal (Privy's derived palette
+     lands too grey/washed): near-white foregrounds stepping down, and
+     subtle white-alpha fills for the login-method icon chips/inputs. */
+  --privy-color-foreground: #f5f5f4;
+  --privy-color-foreground-2: rgba(255, 255, 255, 0.75);
+  --privy-color-foreground-3: rgba(255, 255, 255, 0.55);
+  --privy-color-foreground-4: rgba(255, 255, 255, 0.38);
+  --privy-color-background-2: rgba(255, 255, 255, 0.07);
+  --privy-color-background-3: rgba(255, 255, 255, 0.11);
+  backdrop-filter: blur(28px) saturate(1.15);
+  -webkit-backdrop-filter: blur(28px) saturate(1.15);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.1),
+    0 24px 80px rgba(0, 0, 0, 0.55);
+  font-family: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
+  /* Privy sizes text/spacing in px (a container font-size won't cascade);
+     zoom scales the whole dialog down to our type scale. */
+  zoom: 0.88;
+}
+
+/* The header logo renders oversized by default — match the navbar mark. */
+#privy-modal-content img[src*="superior_trade"] {
+  height: 36px !important;
+  width: auto !important;
+}
+
+/* The Privy palette derives from appearance.theme (#0b0d0a — dark), so its
+   text stays light. Keep the dialog dark glass in BOTH themes; a light
+   fill here would put light text on a light panel. */
+html.light #privy-dialog-backdrop {
+  background: rgba(20, 22, 16, 0.35) !important;
+}
+
+/* ── Light theme fixes ─────────────────────────────────────────────── */
+/* Slider fill was white-on-white in light mode. */
+html.light .cg-range {
+  background: linear-gradient(
+    to right,
+    rgba(23, 23, 23, 0.85) 0%,
+    rgba(23, 23, 23, 0.85) var(--fill, 0%),
+    rgba(23, 23, 23, 0.14) var(--fill, 0%),
+    rgba(23, 23, 23, 0.14) 100%
+  );
+}
+
+/* ── Extra color themes: Dracula + Nord (dark-family — they inherit the dark
+   styling and retint the surfaces; brand lime accent stays) ─────────── */
+html.dracula body {
+  background: #1e1f29;
+}
+html.dracula {
+  --app-bg: #1e1f29;
+  --pill-fill: rgba(68, 71, 90, 0.35);
+  --menu-fill: rgba(40, 42, 54, 0.88);
+}
+html.nord body {
+  background: #242933;
+}
+html.nord {
+  --app-bg: #242933;
+  --pill-fill: rgba(59, 66, 82, 0.4);
+  --menu-fill: rgba(46, 52, 64, 0.9);
+}
+
+/* ── Per-theme accent (except the navbar logo, which is a fixed-lime image
+   asset unaffected by these utilities). The whole app styles its accent with
+   Tailwind `lime-*` utilities, which resolve through `var(--color-lime-*)`.
+   Retinting those vars per theme recolors every accent utility at once —
+   text/bg/border/ring/gradient, opacity variants included (Tailwind applies
+   opacity via color-mix on the resolved var). Dark keeps brand lime; light
+   has its own bespoke remap above; only the two dark-family themes retint:
+   Dracula → purple, Nord → frost cyan. Ramp direction matches lime
+   (50 = lightest … 950 = darkest) so bg-lime-950/text-lime-50 pairings and
+   every shade tier keep their intended contrast. ─────────────────────── */
+html.dracula {
+  --color-lime-50: #f5efff;
+  --color-lime-200: #ddccfb;
+  --color-lime-300: #cdb0fa;
+  --color-lime-400: #bd93f9;
+  --color-lime-950: #2b2140;
+}
+html.nord {
+  --color-lime-50: #eef6f9;
+  --color-lime-200: #c1e0e8;
+  --color-lime-300: #a5d3de;
+  --color-lime-400: #88c0d0;
+  --color-lime-950: #17323b;
+}
+
+/* Tokyo Night — deep indigo dark-family theme, blue accent. */
+html.tokyo body {
+  background: #1a1b26;
+}
+html.tokyo {
+  --app-bg: #1a1b26;
+  --pill-fill: rgba(36, 40, 59, 0.5);
+  --menu-fill: rgba(26, 27, 38, 0.92);
+  --color-lime-50: #dbe4ff;
+  --color-lime-200: #b4c6fc;
+  --color-lime-300: #9ab3f9;
+  --color-lime-400: #7aa2f7;
+  --color-lime-950: #1b2340;
+}
+
+/* privy dialog scale v2 */
+
+/* ── Detect scan sequence (lock-on boxes + finish flash) ─────────────── */
+.cg-scan-box {
+  position: absolute;
+  border: 1px dashed rgba(163, 230, 53, 0.6);
+  border-radius: 6px;
+  box-shadow: inset 0 0 24px rgba(163, 230, 53, 0.08);
+}
+.cg-scan-box::before,
+.cg-scan-box::after {
+  content: "";
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-color: #a3e635;
+  border-style: solid;
+}
+.cg-scan-box::before { top: -2px; left: -2px; border-width: 2px 0 0 2px; }
+.cg-scan-box::after { bottom: -2px; right: -2px; border-width: 0 2px 2px 0; }
+.cg-scan-tag {
+  position: absolute;
+  top: -18px;
+  left: -1px;
+  font-family: var(--font-space-mono), ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #0b0d10;
+  background: #a3e635;
+  padding: 1px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+/* Animated "reading…" dots while the agent's real annotations are in
+   flight — replaced by verbatim reading labels once they land. */
+.cg-scan-tag--reading::after {
+  content: "";
+  display: inline-block;
+  animation: cg-scan-dots 1.2s steps(1) infinite;
+}
+@keyframes cg-scan-dots {
+  0% { content: ""; }
+  25% { content: "."; }
+  50% { content: ".."; }
+  75% { content: "..."; }
+}
+.cg-scan-flash {
+  position: absolute;
+  inset: 0;
+  background: #a3e635;
+  opacity: 0;
+  animation: cg-scan-flash 0.75s ease-out;
+}
+@keyframes cg-scan-flash {
+  0% { opacity: 0; }
+  22% { opacity: 0.08; }
+  100% { opacity: 0; }
+}
+
+/* Detect lock: while the agent reads the chart, an accent glow rings the pane
+   and this overlay swallows pointer + wheel events so pan/zoom is frozen — the
+   agent captured the chart at detect-start, so movement would only strand its
+   read. Default pointer-events (auto) is what does the locking; keep it. */
+.cg-detect-lock {
+  position: absolute;
+  inset: 0;
+  z-index: 32;
+  cursor: progress;
+  background: radial-gradient(130% 90% at 50% 0%, rgba(163, 230, 53, 0.05), transparent 55%);
+  animation: cg-detect-pulse 1.6s ease-in-out infinite;
+}
+@keyframes cg-detect-pulse {
+  0%, 100% { box-shadow: inset 0 0 0 2px rgba(163, 230, 53, 0.4), inset 0 0 38px rgba(163, 230, 53, 0.1); }
+  50% { box-shadow: inset 0 0 0 2px rgba(163, 230, 53, 0.72), inset 0 0 64px rgba(163, 230, 53, 0.2); }
+}
+.cg-detect-badge {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-space-mono), ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #0b0d10;
+  background: #a3e635;
+  padding: 4px 11px;
+  border-radius: 999px;
+  box-shadow: 0 6px 20px -6px rgba(163, 230, 53, 0.6);
+  white-space: nowrap;
+}
+.cg-detect-badge .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #0b0d10;
+  animation: cg-detect-blink 1s ease-in-out infinite;
+}
+@keyframes cg-detect-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* ── Privy login dialog alignment ────────────────────────────────────────
+   Privy ships its own font stack and type scale, which reads foreign next
+   to the terminal (DM Sans). Selectors are the STABLE element ids from the
+   installed @privy-io/react-auth bundle (#privy-dialog etc.) plus its
+   documented --privy-* variables — no obfuscated class names, so minor
+   library bumps won't break this. Scope: typography + spacing only; colors
+   stay driven by the PrivyProvider appearance config. */
+#privy-dialog,
+#privy-modal-content,
+#privy-modal-content * {
+  font-family: var(--font-sans, "DM Sans"), ui-sans-serif, system-ui, sans-serif !important;
+}
+#privy-modal-content {
+  --privy-border-radius-md: 16px;
+  --privy-border-radius-sm: 10px;
+}
+#privy-dialog-title {
+  font-size: 17px !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.01em !important;
+  line-height: 1.35 !important;
+}
+/* Buttons / option rows: one consistent size instead of Privy's mix. */
+#privy-modal-content button {
+  font-size: 13.5px !important;
+  font-weight: 500 !important;
+}
+#privy-modal-content input {
+  font-size: 14px !important;
+}
+/* Footer ("Protected by Privy") — quieter, tighter. */
+#privy-content-footer-container {
+  opacity: 0.55;
+  padding-top: 4px;
+}
+
+/* New plan cards (agent-suggested / fresh) slide into the side panel —
+   attention without the strobe of animate-pulse. */
+@keyframes cg-slide-in {
+  from { opacity: 0; transform: translateX(32px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.cg-slide-in {
+  animation: cg-slide-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cg-slide-in { animation: none; }
+}
+
+/* Live setup-card levels (entry/stop/target on an indicator source): a gentle
+   lime pulse behind the number each time its recomputed value changes, so the
+   cell visibly reads as live-tracking rather than a frozen snapshot. Applied
+   via a changing React key so the animation replays on every value change. */
+@keyframes cg-level-flash {
+  0% { background-color: rgba(163, 230, 53, 0.28); }
+  100% { background-color: transparent; }
+}
+.cg-level-flash {
+  animation: cg-level-flash 0.7s ease-out;
+  border-radius: 4px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cg-level-flash { animation: none; }
+}

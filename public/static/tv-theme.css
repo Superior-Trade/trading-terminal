@@ -1,0 +1,75 @@
+/* Superior Trade TV accent theme — lime (#a3e635) replaces TradingView's
+   default blue on hover/active/selected states inside the widget iframe.
+   Loaded via the widget option custom_css_url (trading-chart.tsx); the
+   @import pulls in the structural base sheet first so these accent
+   variables win the cascade. ONLY accent-related --tv-color-* variables
+   live here — everything else stays in charting_library/custom.css.
+   Variable names verified against the vendored library's CSS bundles
+   (public/static/charting_library/bundles). */
+@import url("/static/charting_library/custom.css");
+
+:root,
+html.theme-dark {
+  --tv-color-crosshair-color: #a3e635;
+
+  /* Toolbar buttons: top toolbar, OHLC header buttons, dropdown triggers */
+  --tv-color-toolbar-button-background-hover: rgba(163, 230, 53, 0.12);
+  --tv-color-toolbar-button-background-expanded: rgba(163, 230, 53, 0.16);
+  --tv-color-toolbar-button-background-active: rgba(163, 230, 53, 0.16);
+  --tv-color-toolbar-button-background-active-hover: rgba(163, 230, 53, 0.2);
+  --tv-color-toolbar-button-background-clicked: rgba(163, 230, 53, 0.16);
+  --tv-color-toolbar-button-text-hover: #a3e635;
+  --tv-color-toolbar-button-text-active: #a3e635;
+  --tv-color-toolbar-button-text-active-hover: #a3e635;
+  --tv-color-toolbar-button-text-clicked: #a3e635;
+
+  /* Active / selected items (armed drawing tools, selected intervals) */
+  --tv-color-item-active-text: #a3e635;
+  --tv-color-toolbar-toggle-button-background-active: rgba(163, 230, 53, 0.16);
+  --tv-color-toolbar-toggle-button-background-active-hover: rgba(163, 230, 53, 0.2);
+  --tv-color-toolbar-save-layout-loader: #a3e635;
+
+  /* Dropdown / popup menu rows */
+  --tv-color-popup-element-text-hover: #a3e635;
+  --tv-color-popup-element-background-hover: rgba(163, 230, 53, 0.12);
+  --tv-color-popup-element-text-active: #a3e635;
+  --tv-color-popup-element-background-active: rgba(163, 230, 53, 0.16);
+  --tv-color-popup-element-toolbox-text-hover: #a3e635;
+  --tv-color-popup-element-toolbox-text-active-hover: #a3e635;
+  /* Toolbox = the text/icon container INSIDE a popup row. The row already
+     paints the lime hover tint — a second tint here stacks two lime layers
+     behind the text (visible double-lime). Keep it transparent. */
+  --tv-color-popup-element-toolbox-background-hover: transparent;
+  --tv-color-popup-element-toolbox-background-active-hover: transparent;
+}
+
+/* Light theme: raw lime text fails contrast on white — use lime-700 for
+   text/icons and keep the lime tint (slightly stronger) for backgrounds. */
+html:not(.theme-dark) {
+  --tv-color-crosshair-color: #4d7c0f;
+
+  --tv-color-toolbar-button-background-hover: rgba(163, 230, 53, 0.22);
+  --tv-color-toolbar-button-background-expanded: rgba(163, 230, 53, 0.28);
+  --tv-color-toolbar-button-background-active: rgba(163, 230, 53, 0.28);
+  --tv-color-toolbar-button-background-active-hover: rgba(163, 230, 53, 0.34);
+  --tv-color-toolbar-button-background-clicked: rgba(163, 230, 53, 0.28);
+  --tv-color-toolbar-button-text-hover: #4d7c0f;
+  --tv-color-toolbar-button-text-active: #4d7c0f;
+  --tv-color-toolbar-button-text-active-hover: #4d7c0f;
+  --tv-color-toolbar-button-text-clicked: #4d7c0f;
+
+  --tv-color-item-active-text: #4d7c0f;
+  --tv-color-toolbar-toggle-button-background-active: rgba(163, 230, 53, 0.28);
+  --tv-color-toolbar-toggle-button-background-active-hover: rgba(163, 230, 53, 0.34);
+  --tv-color-toolbar-save-layout-loader: #4d7c0f;
+
+  --tv-color-popup-element-text-hover: #4d7c0f;
+  --tv-color-popup-element-background-hover: rgba(163, 230, 53, 0.22);
+  --tv-color-popup-element-text-active: #4d7c0f;
+  --tv-color-popup-element-background-active: rgba(163, 230, 53, 0.28);
+  --tv-color-popup-element-toolbox-text-hover: #4d7c0f;
+  --tv-color-popup-element-toolbox-text-active-hover: #4d7c0f;
+  /* Same double-lime fix as dark theme: row paints, toolbox stays clear. */
+  --tv-color-popup-element-toolbox-background-hover: transparent;
+  --tv-color-popup-element-toolbox-background-active-hover: transparent;
+}

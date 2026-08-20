@@ -1,0 +1,9 @@
+[
+ {
+  "id": "s4",
+  "message": "draw a trendline connecting the last 3 higher lows on this 4h",
+  "expect": "draw",
+  "context": "plain",
+  "note": "multi-step: set_timeframe then draw_trendline via continuation"
+ }
+]

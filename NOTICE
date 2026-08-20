@@ -1,0 +1,41 @@
+Trading Terminal
+Copyright 2026 Superior Trade
+
+This product includes software developed at Superior Trade, licensed under the
+Apache License, Version 2.0 (see LICENSE).
+
+--------------------------------------------------------------------------------
+TradingView Advanced Charts
+--------------------------------------------------------------------------------
+
+This project integrates with TradingView's Advanced Charts library, which is NOT
+included in this repository and is NOT covered by the Apache License above.
+
+The library is licensed by TradingView Inc. directly to each user, free of charge,
+under terms that prohibit redistribution. You must obtain your own copy:
+
+    https://www.tradingview.com/advanced-charts/
+
+Installation instructions are in docs/charting-library.md. The integration code in
+components/chart/ is ours and is Apache-2.0 licensed; the library it calls into is
+not.
+
+--------------------------------------------------------------------------------
+Third-party dependencies
+--------------------------------------------------------------------------------
+
+Runtime and build dependencies are declared in package.json and installed from npm,
+each under its own license. Notable ones:
+
+  Next.js, React                  MIT
+  Drizzle ORM, drizzle-kit        Apache-2.0
+  PGlite (@electric-sql/pglite)   Apache-2.0
+  node-postgres (pg)              MIT
+  Vercel AI SDK (ai, @ai-sdk/*)   Apache-2.0
+  @nktkas/hyperliquid             MIT
+  @privy-io/react-auth            Apache-2.0
+  Tailwind CSS                    MIT
+  Sentry SDK (@sentry/nextjs)     MIT
+
+Run `npm ls --all` or inspect node_modules for the complete set and their license
+texts.

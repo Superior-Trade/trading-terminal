@@ -1,0 +1,5 @@
+# Superior Trade — Terminal · security policy (RFC 9116)
+Contact: mailto:info@superior.trade
+Expires: 2027-07-13T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://terminal.superior.trade/.well-known/security.txt

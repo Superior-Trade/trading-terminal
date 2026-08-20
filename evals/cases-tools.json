@@ -1,0 +1,12 @@
+[
+ { "id": "t1", "message": "which coin has the biggest 24h gain right now?", "expect": "screen", "context": "plain", "note": "screener: top gainer" },
+ { "id": "t2", "message": "top 5 perps by open interest?", "expect": "screen", "context": "plain", "note": "screener: OI ranking" },
+ { "id": "t3", "message": "any HIP-3 markets with decent volume worth looking at?", "expect": "screen", "context": "plain", "note": "screener: hip3 filter" },
+ { "id": "t4", "message": "現在資金費率最高的是哪個幣？", "expect": "screen", "context": "plain", "note": "zh funding extreme" },
+ { "id": "t5", "message": "switch to ETH", "expect": "switch", "context": "plain", "note": "direct symbol switch" },
+ { "id": "t6", "message": "take me to the xyz TSLA market", "expect": "switch", "context": "plain", "note": "hip3 symbol switch" },
+ { "id": "t7", "message": "go to the coin with the most volume that isn't BTC or ETH", "expect": "switch", "context": "plain", "note": "screen then switch" },
+ { "id": "t8", "message": "hows my bots doing this week", "expect": "pnl", "context": "plain", "note": "pnl check" },
+ { "id": "t9", "message": "how much have my strategies made or lost overall?", "expect": "pnl", "context": "plain", "note": "all-time pnl" },
+ { "id": "t10", "message": "why is DOGE pumping today?", "expect": "no_switch", "context": "plain", "note": "question ABOUT a coin must not switch chart" }
+]

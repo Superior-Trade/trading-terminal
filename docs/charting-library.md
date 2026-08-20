@@ -1,0 +1,80 @@
+# TradingView Advanced Charts
+
+The chart is TradingView's [Advanced Charts](https://www.tradingview.com/advanced-charts/)
+library. It is free, but TradingView licenses it to **you** and forbids redistribution,
+so it cannot live in this repository. You have to fetch your own copy once.
+
+Everything else in the terminal is here. This is the only missing piece, and the build
+stops with an explanatory error until you install it.
+
+## 1. Get access
+
+Apply at <https://www.tradingview.com/advanced-charts/>. You give them a GitHub
+username; they grant that account access to a private repository. Approval typically
+takes a day or two.
+
+You are agreeing to TradingView's terms, not ours. Attribution requirements and usage
+limits come from them — read what you sign.
+
+## 2. Install it
+
+Once you have the invitation:
+
+```bash
+npm run setup:charts
+```
+
+That clones the repository with your own git credentials and copies two directories into
+place:
+
+```
+public/static/charting_library/   the library itself
+public/static/datafeeds/          TradingView's UDF datafeed helpers
+```
+
+Both are listed in `.gitignore` and will never be committed.
+
+### If the clone fails
+
+`Repository not found` almost always means the GitHub account your git is authenticated
+as is not the one TradingView granted. Check with `gh auth status` or
+`git config user.name`, and confirm the invitation was accepted.
+
+If TradingView has moved the repository, point the script at the right one:
+
+```bash
+CHARTING_LIBRARY_REPO=https://github.com/some-org/charting_library.git npm run setup:charts
+```
+
+## 3. Or install it by hand
+
+Download the archive from TradingView and unpack it so that these two files exist:
+
+```
+public/static/charting_library/charting_library.js
+public/static/datafeeds/udf/dist/bundle.js
+```
+
+`npm run dev` checks for the first of those and will tell you if it is missing.
+
+## Version
+
+Built and tested against **Charting Library v28.5.0**. Later versions are usually
+drop-in; the integration lives in `components/chart/` and the typed surface it depends
+on is `charting_library.d.ts`, which ships with the library.
+
+If a newer version breaks the build, the errors will point at `components/chart/trading-chart.tsx`,
+which is where the widget is constructed and configured.
+
+## What we built on top
+
+The library draws candles. Everything else is ours and is in this repository:
+
+| File | What it does |
+| --- | --- |
+| `components/chart/trading-chart.tsx` | Widget lifecycle, drawing capture, plan overlays |
+| `components/chart/hyperliquid-datafeed.ts` | Hyperliquid candles and live ticks |
+| `components/chart/lighter-datafeed.ts` | The same for Lighter |
+| `components/chart/venue-datafeed-router.ts` | Routes a symbol to the right venue |
+| `components/chart/footprint-overlay.tsx` | Order-flow footprint drawn over the chart |
+| `lib/chart-bridge.tsx` | Lets the agent read and draw on the chart |
