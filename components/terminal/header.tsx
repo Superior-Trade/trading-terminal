@@ -9,6 +9,7 @@ import { useHeldUsdc } from "../../lib/use-held-usdc";
 import { useAccountValue } from "../../lib/use-account-value";
 import { useVenueOnboarding } from "../../lib/use-venue-onboarding";
 import { DepositDialog } from "./deposit-dialog";
+import { WithdrawDialog } from "./withdraw-dialog";
 import { MarketPicker } from "./market-picker";
 import { MarketPositioning } from "./market-positioning";
 import { Inbox } from "./inbox";
@@ -74,14 +75,18 @@ export function Header() {
   const { t } = useLang();
   // Method chooser (Card vs Crypto) — the dialog resolves the deposit link.
   const [depositOpen, setDepositOpen] = useState(false);
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
   // Other surfaces (deploy failing on insufficient funds; the account
   // dropdown's Accounts section) open these dialogs via window events — the
   // dialogs themselves stay mounted here in the header.
   useEffect(() => {
     const openDeposit = () => setDepositOpen(true);
+    const openWithdraw = () => setWithdrawOpen(true);
     window.addEventListener("cg:open-deposit", openDeposit);
+    window.addEventListener("cg:open-withdraw", openWithdraw);
     return () => {
       window.removeEventListener("cg:open-deposit", openDeposit);
+      window.removeEventListener("cg:open-withdraw", openWithdraw);
     };
   }, []);
 
@@ -202,6 +207,7 @@ export function Header() {
                 {t("deposit")}
               </button>
               {depositOpen && <DepositDialog onClose={() => setDepositOpen(false)} />}
+              {withdrawOpen && <WithdrawDialog onClose={() => setWithdrawOpen(false)} />}
             </div>
           </>
         )}

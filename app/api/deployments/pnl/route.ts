@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { resolveSuperiorAuth } from "../../../../lib/superior-key";
+import { requireSuperiorAuth } from "../../../../lib/account";
 import { deploymentHistory } from "../../../../lib/superior-api";
 
 export const runtime = "nodejs";
@@ -64,7 +64,7 @@ let cache: { at: number; key: string; body: Record<string, DeploymentPnl> } | nu
 
 export async function GET(req: Request) {
   try {
-    const { key } = await resolveSuperiorAuth(req);
+    const { key } = await requireSuperiorAuth();
     if (cache && cache.key === key && Date.now() - cache.at < 30_000) {
       return NextResponse.json({ items: cache.body });
     }

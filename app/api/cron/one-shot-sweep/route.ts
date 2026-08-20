@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { getDb, schema } from "../../../../lib/db";
-import { decryptSecret } from "../../../../lib/server-auth";
+import { superiorKey } from "../../../../lib/account";
 import { deploymentHistory, controlDeployment, sweepWalletToMain } from "../../../../lib/superior-api";
 import { logStrategy, alreadyLogged } from "../../../../lib/strategy-log";
 
@@ -49,28 +49,6 @@ interface HistItem {
 const isClose = (f: HistFill) =>
   (f.dir ?? "").toLowerCase().includes("close") ||
   Math.abs(typeof f.closedPnl === "string" ? parseFloat(f.closedPnl) : f.closedPnl ?? 0) > 0;
-
-async function keyForUser(userId: string): Promise<string | null> {
-  const db = getDb();
-  const rows = await db
-    .select({ enc: schema.users.stKeyEncrypted })
-    .from(schema.users)
-    .where(eq(schema.users.privyDid, userId));
-  const enc = rows[0]?.enc;
-  if (enc) {
-    try {
-      return decryptSecret(enc);
-    } catch {
-      /* fall through to org key */
-    }
-  }
-  // A sweep/stop MUST act on the USER's own account — never the org's. With no
-  // per-user key we skip this user (caller: `if (!key) continue`) rather than
-  // fall back to the org key. Org key stays a local-dev convenience only.
-  return process.env.NODE_ENV !== "production"
-    ? (process.env.SUPERIOR_TRADE_API_KEY ?? null)
-    : null;
-}
 
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
@@ -141,7 +119,7 @@ export async function GET(req: Request) {
     const depIds = byUser.get(userId) ?? [];
     const verifyList = verifyByUser.get(userId) ?? [];
     try {
-      const key = await keyForUser(userId);
+      const key = superiorKey();
       if (!key) continue;
 
       const wantedIds = new Set([

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireUser, type AuthedUser } from "../../../lib/server-auth";
+import { currentAccount, type Account } from "../../../lib/account";
 import { track, trackFlush } from "../../../lib/analytics";
 
 export const runtime = "nodejs";
@@ -7,9 +7,8 @@ export const runtime = "nodejs";
 // Client-side funnel events (lib/track.ts). Server-originated actions
 // (deploy, compile, deposit credit …) are tracked directly in their route
 // handlers with server-verified props — this endpoint only accepts the
-// whitelisted UI-interaction set below, because the event name becomes a
-// Discord channel: an open set would let any client spam channels into
-// existence.
+// whitelisted UI-interaction set below, so a stray client cannot invent
+// event names.
 const CLIENT_EVENTS = new Set([
   "page_view",
   "login_completed",
@@ -41,13 +40,13 @@ function allow(id: string): boolean {
 }
 
 export async function POST(req: Request) {
-  // Pre-login events are part of the funnel — auth failure means anonymous,
-  // not rejected.
-  let user: AuthedUser | null = null;
+  // A page_view can arrive before the database is reachable, so an account
+  // that cannot be resolved is anonymous rather than an error.
+  let user: Account | null = null;
   try {
-    user = await requireUser(req);
-  } catch (e) {
-    if (!(e instanceof Response)) throw e;
+    user = await currentAccount();
+  } catch {
+    /* anonymous */
   }
 
   let body: { event?: unknown; props?: unknown; anonId?: unknown };
@@ -65,7 +64,7 @@ export async function POST(req: Request) {
     typeof body.anonId === "string" && /^[a-zA-Z0-9-]{8,64}$/.test(body.anonId)
       ? body.anonId
       : null;
-  const distinctId = user?.did ?? (anon ? `anon:${anon}` : "anon");
+  const distinctId = user?.id ?? (anon ? `anon:${anon}` : "anon");
   if (!allow(distinctId)) return NextResponse.json({ ok: true });
 
   // Sanitize props: scalar values only, bounded count/length.

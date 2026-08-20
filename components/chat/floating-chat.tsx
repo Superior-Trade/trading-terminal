@@ -1265,7 +1265,7 @@ export function FloatingChat() {
         }
         appendNote(
           err instanceof Error && /unauthorized|invalid token/i.test(err.message)
-            ? t("loginPrompt")
+            ? t("apiKeyPrompt")
             : `Agent unavailable (${err instanceof Error ? err.message : "error"}).`,
         );
       }

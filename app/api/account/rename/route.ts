@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { resolveSuperiorAuth } from "../../../../lib/superior-key";
+import { requireSuperiorAuth } from "../../../../lib/account";
 import { renameAccount } from "../../../../lib/superior-api";
 import { track } from "../../../../lib/analytics";
 
@@ -15,7 +15,7 @@ const ADDR_RE = /^0x[a-fA-F0-9]{40}$/;
 export async function POST(req: Request) {
   let user, key;
   try {
-    ({ user, key } = await resolveSuperiorAuth(req));
+    ({ user, key } = await requireSuperiorAuth());
   } catch (e) {
     if (e instanceof Response) return e;
     throw e;
@@ -36,7 +36,7 @@ export async function POST(req: Request) {
 
   const result = await renameAccount(key, wallet, name);
   track("account_renamed", {
-    user: user.did,
+    user: user.id,
     props: { wallet, ok: result.ok },
   });
   if (!result.ok) {

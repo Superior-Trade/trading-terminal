@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { resolveSuperiorAuth } from "../../../lib/superior-key";
+import { requireSuperiorAuth } from "../../../lib/account";
 import { submitBacktest } from "../../../lib/superior-api";
 import { logStrategy, codeHash } from "../../../lib/strategy-log";
 import { track } from "../../../lib/analytics";
@@ -12,9 +12,9 @@ export async function POST(req: Request) {
   let apiKey: string;
   let userDid: string;
   try {
-    const auth = await resolveSuperiorAuth(req);
+    const auth = await requireSuperiorAuth();
     apiKey = auth.key;
-    userDid = auth.user.did;
+    userDid = auth.user.id;
   } catch (e) {
     if (e instanceof Response) return e;
     throw e;

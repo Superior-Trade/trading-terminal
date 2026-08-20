@@ -13,13 +13,12 @@ import {
 // millisecond timestamps stay JS numbers via bigint(mode: "number"), and the
 // *_json columns stay text (the app JSON.stringify/parses them by hand).
 
-// Primary key everywhere user-related is the Privy DID — nothing
-// Superior-specific, so a future Privy-app migration only relinks DIDs.
+// The account rows belong to (see lib/account.ts). A self-hosted terminal has
+// exactly one, but everything user-scoped still carries the id so the schema
+// does not assume that.
 export const users = pgTable("users", {
-  privyDid: text("privy_did").primaryKey(),
+  id: text("id").primaryKey(),
   walletAddress: text("wallet_address"),
-  /** AES-256-GCM encrypted st_live key (iv:tag:cipher, base64). Server-only. */
-  stKeyEncrypted: text("st_key_encrypted"),
   lang: text("lang").default("en"),
   theme: text("theme").default("dark"),
   createdAt: bigint("created_at", { mode: "number" }).notNull(),
@@ -165,7 +164,7 @@ export const deployments = pgTable(
 export const usageCounter = pgTable(
   "usage_counter",
   {
-    userId: text("user_id").notNull(), // Privy DID
+    userId: text("user_id").notNull(),
     bucket: text("bucket").notNull(),
     count: integer("count").notNull().default(0),
     /** Epoch ms after which this window is dead and prunable. */

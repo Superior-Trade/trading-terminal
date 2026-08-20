@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { generateObject } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { z } from "zod";
-import { requireUser } from "../../../lib/server-auth";
+import { currentAccount } from "../../../lib/account";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -53,7 +53,7 @@ interface KnownDrawing {
 
 export async function POST(req: Request) {
   try {
-    await requireUser(req);
+    await currentAccount();
     const body = (await req.json()) as {
       screenshot?: string | null;
       known?: KnownDrawing[];

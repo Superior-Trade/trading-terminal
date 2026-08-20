@@ -23,13 +23,13 @@ Please give us a reasonable window to fix an issue before disclosing it publicly
 
 The code in this repository:
 
-- authentication and how requests are attributed to an account
-- how API keys are stored, encrypted and forwarded
+- how the API key is stored and forwarded, and anything that could leak it to the
+  browser or to a third party
 - order construction, position sizing and the safety validation around it
 - the strategy validator, and anything that lets generated code escape it
 - injection through chat, chart drawings or generated strategy code
 
-Out of scope: the Superior Trade API, Hyperliquid, OpenRouter, Privy and TradingView.
+Out of scope: the Superior Trade API, Hyperliquid, OpenRouter and TradingView.
 Report those to the people who run them.
 
 ## Running this yourself
@@ -38,9 +38,10 @@ A few things worth knowing if you host it:
 
 - **Your keys are on your machine.** `.env.local` is gitignored. Keep it that way — a
   Superior Trade API key can move funds.
-- **`AUTH_MODE=local` means no login.** Anyone who can reach the port is you. Do not
-  expose a local-mode instance to the internet; use `AUTH_MODE=privy` for that, which is
-  why a production build refuses to start in local mode unless you ask for it by name.
+- **There is no login.** Anyone who can reach the port can trade with your key. That is
+  the intended design for something running on your own machine, and it is exactly why
+  you must not expose it on a public address without putting authentication in front of
+  it — a reverse proxy, a VPN, or an SSH tunnel.
 - **Read the strategies before you deploy them.** The agent writes code, and the
   validator catches the failures we know about — not the ones we do not.
 - **`FREEZE_ALL=1`** rejects every money-moving route with a 503. It is there for the

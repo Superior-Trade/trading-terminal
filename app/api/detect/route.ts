@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { generateObject } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { z } from "zod";
-import { requireUser } from "../../../lib/server-auth";
+import { currentAccount } from "../../../lib/account";
 import { logStrategy } from "../../../lib/strategy-log";
 import { track } from "../../../lib/analytics";
 import { renderMemory } from "../../../lib/agent-memory";
@@ -182,7 +182,7 @@ ${INDICATOR_TIER_DIGEST}`;
 
 export async function POST(req: Request) {
   try {
-    const user = await requireUser(req); // gate LLM spend behind auth (dev-mode passes)
+    const user = await currentAccount(); // gate LLM spend behind auth (dev-mode passes)
     const body = (await req.json()) as {
       chartContext?: unknown;
       history?: Array<{ role: string; text: string }>;
@@ -205,7 +205,7 @@ export async function POST(req: Request) {
       .join("\n");
     // Preferences stated before the recent window live in rolling memory.
     const tMemory0 = Date.now();
-    const memory = await renderMemory(user.did, body.conversationId);
+    const memory = await renderMemory(user.id, body.conversationId);
     const tDerivs0 = Date.now();
     const derivsCtx = await marketContext(
       (body.chartContext as { symbol?: string } | null)?.symbol,
@@ -457,7 +457,7 @@ export async function POST(req: Request) {
       (body.chartContext as { symbol?: string } | null)?.symbol ?? null;
     await Promise.all(
       (object.plans ?? []).map((p) =>
-        logStrategy(user.did, "detect", {
+        logStrategy(user.id, "detect", {
           symbol: detectSymbol,
           model: detectModel,
           plan: p,
@@ -465,7 +465,7 @@ export async function POST(req: Request) {
       ),
     );
     track("plan_detected", {
-      user: user.did,
+      user: user.id,
       props: {
         symbol: detectSymbol,
         plans: (object.plans ?? []).length,

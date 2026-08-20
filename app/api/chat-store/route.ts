@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { desc, eq, and } from "drizzle-orm";
 import { getDb, schema } from "../../../lib/db";
-import { requireUser } from "../../../lib/server-auth";
+import { currentAccount } from "../../../lib/account";
 
 export const runtime = "nodejs";
 
@@ -12,14 +12,14 @@ export const runtime = "nodejs";
 
 export async function GET(req: Request) {
   try {
-    const user = await requireUser(req);
+    const user = await currentAccount();
     const db = getDb();
     const convId = new URL(req.url).searchParams.get("c");
     if (!convId) {
       const items = await db
         .select()
         .from(schema.conversations)
-        .where(eq(schema.conversations.userId, user.did))
+        .where(eq(schema.conversations.userId, user.id))
         .orderBy(desc(schema.conversations.updatedAt))
         .limit(50);
       return NextResponse.json({ items });
@@ -30,7 +30,7 @@ export async function GET(req: Request) {
       .where(
         and(
           eq(schema.conversations.id, convId),
-          eq(schema.conversations.userId, user.did),
+          eq(schema.conversations.userId, user.id),
         ),
       );
     if (!conv.length) return NextResponse.json({ items: [] });
@@ -75,7 +75,7 @@ interface IncomingMessage {
 
 export async function POST(req: Request) {
   try {
-    const user = await requireUser(req);
+    const user = await currentAccount();
     const db = getDb();
     const body = (await req.json()) as {
       conversationId: string;
@@ -91,13 +91,13 @@ export async function POST(req: Request) {
       .select({ id: schema.conversations.id, userId: schema.conversations.userId })
       .from(schema.conversations)
       .where(eq(schema.conversations.id, body.conversationId));
-    if (existing.length && existing[0].userId !== user.did) {
+    if (existing.length && existing[0].userId !== user.id) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
     if (!existing.length) {
       await db.insert(schema.conversations).values({
         id: body.conversationId,
-        userId: user.did,
+        userId: user.id,
         title: body.title ?? null,
         stateJson: body.state ? JSON.stringify(body.state) : null,
         createdAt: now,
@@ -143,7 +143,7 @@ export async function POST(req: Request) {
 // /reset truly start over. Ownership-checked; recreated on the next message.
 export async function DELETE(req: Request) {
   try {
-    const user = await requireUser(req);
+    const user = await currentAccount();
     const db = getDb();
     const convId = new URL(req.url).searchParams.get("c");
     if (!convId) {
@@ -154,7 +154,7 @@ export async function DELETE(req: Request) {
       .from(schema.conversations)
       .where(eq(schema.conversations.id, convId));
     // Not found → nothing to clear (idempotent). Found but not owned → forbid.
-    if (conv.length && conv[0].userId !== user.did) {
+    if (conv.length && conv[0].userId !== user.id) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
     await db
@@ -165,7 +165,7 @@ export async function DELETE(req: Request) {
       .where(
         and(
           eq(schema.conversations.id, convId),
-          eq(schema.conversations.userId, user.did),
+          eq(schema.conversations.userId, user.id),
         ),
       );
     return NextResponse.json({ ok: true });

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { generateObject } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { z } from "zod";
-import { requireUser } from "../../../lib/server-auth";
+import { currentAccount } from "../../../lib/account";
 import { consumeRate, rateLimitBody } from "../../../lib/rate-limit";
 import { logStrategy, codeHash } from "../../../lib/strategy-log";
 import { track } from "../../../lib/analytics";
@@ -42,7 +42,7 @@ const StrategySchema = z.object({
 
 export async function POST(req: Request) {
   try {
-    const user = await requireUser(req);
+    const user = await currentAccount();
     const body = (await req.json()) as {
       plan: unknown;
       chartContext?: unknown;
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
     // Rate limit: count only fresh compiles, not the automatic repair retry
     // (one deploy = one unit even if it needed a fixup pass). Fails open.
     if (!body.repair) {
-      const rl = await consumeRate(user.did, "compile", Date.now());
+      const rl = await consumeRate(user.id, "compile", Date.now());
       if (!rl.ok) return NextResponse.json(rateLimitBody("compile", rl), { status: 429 });
     }
     const { object } = await generateObject({
@@ -162,7 +162,7 @@ export async function POST(req: Request) {
     const compileSymbol =
       (body.chartContext as { symbol?: string } | null)?.symbol ?? null;
     if (guardErrors.length) {
-      await logStrategy(user.did, "compile_reject", {
+      await logStrategy(user.id, "compile_reject", {
         symbol: compileSymbol,
         model: compileModel,
         plan: body.plan,
@@ -176,7 +176,7 @@ export async function POST(req: Request) {
         },
       });
       track("strategy_compile_rejected", {
-        user: user.did,
+        user: user.id,
         props: {
           symbol: compileSymbol,
           name: object.name,
@@ -195,7 +195,7 @@ export async function POST(req: Request) {
         { status: 422 },
       );
     }
-    await logStrategy(user.did, "compile_ok", {
+    await logStrategy(user.id, "compile_ok", {
       symbol: compileSymbol,
       model: compileModel,
       plan: body.plan,
@@ -208,7 +208,7 @@ export async function POST(req: Request) {
       },
     });
     track("strategy_compiled", {
-      user: user.did,
+      user: user.id,
       props: {
         symbol: compileSymbol,
         name: object.name,

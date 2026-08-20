@@ -27,14 +27,6 @@ const DICT: Record<string, { en: string; zh: string }> = {
   },
   rlResetsAt: { en: "resets {time}", zh: "{time} 重置" },
   rlResetsSoon: { en: "resets shortly", zh: "即將重置" },
-  // AI credits row in the account dropdown — launch week is unlimited: the
-  // 1,000 base allotment is shown struck-through next to an ∞.
-  credits: { en: "AI Credits", zh: "AI 額度" },
-  creditsUnlimited: { en: "Unlimited", zh: "無限" },
-  creditsTip: {
-    en: "Unlimited usage — free for launch week",
-    zh: "無限使用 — 上線首週免費",
-  },
   tabDetected: { en: "Draft Setups", zh: "草稿策略" },
   tabRunning: { en: "Running Setups", zh: "運行中的策略" },
   setupsSheet: { en: "Setups", zh: "策略" },
@@ -292,63 +284,16 @@ const DICT: Record<string, { en: string; zh: string }> = {
   },
   withdraw: { en: "Withdraw", zh: "出金" },
   withdrawTitle: { en: "Withdraw USDC", zh: "出金 USDC" },
-  withdrawRegisterTitle: {
-    en: "Register your withdrawal wallet",
-    zh: "登記你的出金錢包",
-  },
-  withdrawRegisterIntro: {
-    en: "Withdrawals will be locked to this wallet. After registration, it cannot be changed in the Terminal.",
-    zh: "所有出金將鎖定至此錢包。登記後無法在 Terminal 內更改。",
-  },
-  withdrawRegisterSafety: {
-    en: "Only register a wallet you control and can access long term.",
-    zh: "只可登記由你控制並可長期存取的錢包。",
-  },
-  withdrawRegisterCandidate: {
-    en: "Wallet to register",
-    zh: "將登記的錢包",
-  },
-  withdrawRegisterPermanent: {
-    en: "Permanent destination",
-    zh: "永久目的地",
-  },
-  withdrawRegisterAcknowledge: {
-    en: "I understand this will be my only withdrawal wallet.",
-    zh: "我明白這將是我唯一的出金錢包。",
-  },
-  withdrawRegisterSubmit: {
-    en: "Register wallet",
-    zh: "登記錢包",
-  },
-  withdrawRegisterSubmitting: {
-    en: "Registering…",
-    zh: "登記中…",
-  },
-  withdrawRegisterFailed: {
-    en: "Wallet registration failed. Please try again.",
-    zh: "錢包登記失敗，請再試一次。",
-  },
-  withdrawRegisterUnavailable: {
-    en: "No eligible wallet is available. Fund your Superior wallet from the wallet you want to register, then try again.",
-    zh: "目前沒有符合資格的錢包。請先從你想登記的錢包向 Superior 錢包入金，然後再試。",
-  },
-  withdrawRegisterLockedUnavailable: {
-    en: "Your registered wallet does not match the wallet currently verified on this account. Withdrawals are blocked.",
-    zh: "已登記錢包與此帳戶目前驗證的錢包不符，出金已被封鎖。",
-  },
   withdrawAvailable: { en: "Available", zh: "可出金" },
   withdrawMax: { en: "MAX", zh: "全部" },
-  withdrawDestLabel: {
-    en: "Registered withdrawal wallet",
-    zh: "已登記的出金錢包",
-  },
-  withdrawDestEmbedded: {
-    en: "To your Privy wallet (your login identity)",
-    zh: "轉至你的 Privy 錢包（你的登入身分）",
+  withdrawDestLabel: { en: "Destination", zh: "目的地" },
+  withdrawDestSuperior: {
+    en: "Your Superior wallet on Arbitrum",
+    zh: "你在 Arbitrum 的 Superior 錢包",
   },
   withdrawDestNote: {
-    en: "This destination is permanently locked. Funds return through your Superior wallet; email logins also require a one-time code.",
-    zh: "此目的地已永久鎖定。資金會先返回你的 Superior 錢包；電郵登入亦需要一次性驗證碼。",
+    en: "The destination is resolved from your API key and cannot be changed here. To send onward to a wallet you hold the keys for, sign in at superior.trade.",
+    zh: "目的地由你的 API 金鑰決定，無法在此更改。若要再轉至你自己保管私鑰的錢包，請登入 superior.trade。",
   },
   withdrawFeeNote: {
     en: "USDC on Arbitrum · $1 network fee · arrives in ~5 min",
@@ -359,25 +304,10 @@ const DICT: Record<string, { en: string; zh: string }> = {
     zh: "最低出金：{min} USDC",
   },
   withdrawSubmit: { en: "Withdraw", zh: "確認出金" },
-  withdrawOtpLabel: { en: "Email verification code", zh: "電郵驗證碼" },
-  withdrawOtpSent: {
-    en: "Sent to {email}",
-    zh: "已傳送至 {email}",
-  },
-  withdrawOtpResend: { en: "Resend", zh: "重新傳送" },
-  withdrawOtpSend: { en: "Send verification code", zh: "傳送驗證碼" },
-  withdrawOtpInvalid: {
-    en: "Enter the 6-digit verification code.",
-    zh: "請輸入 6 位數驗證碼。",
-  },
   withdrawSubmitting: { en: "Withdrawing…", zh: "出金中…" },
   withdrawDone: {
-    en: "≈${amt} is routing through your Superior wallet — usually arrives on Arbitrum in ~5 min",
-    zh: "≈${amt} 正經由你的 Superior 錢包轉出 — 通常約 5 分鐘後到達你的 Arbitrum 錢包",
-  },
-  withdrawNoDest: {
-    en: "No login wallet found on this account — log in with a wallet to withdraw.",
-    zh: "此帳戶沒有登入錢包 — 請使用錢包登入後再出金。",
+    en: "≈${amt} is on its way to your Superior wallet — usually arrives on Arbitrum in ~5 min",
+    zh: "≈${amt} 正轉往你的 Superior 錢包 — 通常約 5 分鐘後到達 Arbitrum",
   },
   withdrawQuoteError: {
     en: "Couldn't load your withdrawal details — try again shortly.",
@@ -487,7 +417,6 @@ const DICT: Record<string, { en: string; zh: string }> = {
   restarting: { en: "Restarting…", zh: "重新啟動中…" },
   exiting: { en: "Closing positions…", zh: "平倉中…" },
   deleting: { en: "Deleting…", zh: "刪除中…" },
-  login: { en: "Login", zh: "登入" },
   settings: { en: "Settings", zh: "設定" },
   advancedSettings: { en: "+ More settings", zh: "+ 更多設定" },
   detectStepRead: { en: "Reading chart", zh: "讀取圖表" },
@@ -505,19 +434,15 @@ const DICT: Record<string, { en: string; zh: string }> = {
   fontLarge: { en: "Large", zh: "大" },
   darkTheme: { en: "☾ Dark", zh: "☾ 深色" },
   lightTheme: { en: "☀ Light", zh: "☀ 淺色" },
-  logout: { en: "Logout", zh: "登出" },
-  signedIn: { en: "Signed in", zh: "已登入" },
   copyAddress: { en: "Copy wallet address", zh: "複製錢包地址" },
   copied: { en: "✓ Copied", zh: "✓ 已複製" },
   manageAccount: { en: "Manage account ↗", zh: "管理帳戶 ↗" },
-  devMode: { en: "DEV", zh: "DEV" },
-  devModeHint: {
-    en: "Privy keys not configured — running as a local dev user.",
-    zh: "尚未設定 Privy 金鑰 — 以本機開發者身分執行。",
-  },
-  loginPrompt: {
-    en: "Sign in (top right) to use the AI and see your data.",
-    zh: "請先登入（右上角）以使用 AI 並查看你的資料。",
+  // Our own routes never answer "unauthorized" — there is no login. This is
+  // the upstream API rejecting the key, so point at the key, not at a
+  // sign-in button that does not exist.
+  apiKeyPrompt: {
+    en: "Superior Trade rejected your API key — check SUPERIOR_TRADE_API_KEY in .env.local.",
+    zh: "Superior Trade 拒絕了你的 API 金鑰 — 請檢查 .env.local 中的 SUPERIOR_TRADE_API_KEY。",
   },
   detectedNote: {
     en: "Detected {n} setups — they're in the panel:",
@@ -710,7 +635,6 @@ const DICT: Record<string, { en: string; zh: string }> = {
   ofBin: { en: "bin", zh: "區間" },
   chartLoadFailed: { en: "Failed to load chart", zh: "圖表載入失敗" },
   close: { en: "Close", zh: "關閉" },
-  accountFallback: { en: "Account", zh: "帳戶" },
   // Deploy/detect failure + notify strings (setups-context).
   deployFailedNote: {
     en: 'Deployment of "{title}" failed: {error}',

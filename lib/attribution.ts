@@ -39,7 +39,7 @@ export interface FirstTouch {
 }
 
 /** Capture & persist first-touch acquisition data. Idempotent: writes only
- *  when nothing is stored yet, so the value survives the Privy login reload
+ *  when nothing is stored yet, so the value survives a page reload
  *  and every later load (true first-touch). Safe to call on any load. */
 export function captureFirstTouch(): FirstTouch {
   try {

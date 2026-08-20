@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireUser } from "../../../lib/server-auth";
+import { currentAccount } from "../../../lib/account";
 import { getUsage } from "../../../lib/rate-limit";
 
 export const runtime = "nodejs";
@@ -9,8 +9,8 @@ export const runtime = "nodejs";
 export async function GET(req: Request) {
   let did: string;
   try {
-    const user = await requireUser(req);
-    did = user.did;
+    const user = await currentAccount();
+    did = user.id;
   } catch (e) {
     if (e instanceof Response) return e;
     throw e;

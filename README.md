@@ -34,6 +34,9 @@ you think. The agent takes it from there:
   and time-boxed auto-stops.
 - **Watches it.** Live PnL, order flow, liquidation heatmaps, and an inbox that tells
   you when something happened.
+- **Moves the money.** Deposit USDC into trading, shuffle it between accounts, and
+  withdraw it back out — see [docs/withdrawals.md](docs/withdrawals.md) for how far
+  that last one goes.
 
 Everything runs on your machine. The only things that leave it are the API calls you
 configure.
@@ -114,20 +117,18 @@ they are deployed to the Superior Trade API, which runs them as live bots.
 | `OPENROUTER_API_KEY` | — | Required. |
 | `AGENT_MODEL`, `DETECT_MODEL` | compiled-in | Override to trade cost against quality. |
 | `DATABASE_URL` | unset | Unset runs the embedded database. Any Postgres URL works; a `*.neon.tech` host uses Neon's HTTP driver. |
-| `AUTH_MODE` | `local` | See below. |
 | `NEXT_PUBLIC_HL_NETWORK` | `mainnet` | `testnet` to trade paper. |
 | `POSTHOG_KEY`, `SENTRY_DSN`, `NEXT_PUBLIC_GA_ID` | unset | All analytics and error reporting are off unless you switch them on. |
 
-### Running it for other people
+### There is no login
 
-`AUTH_MODE=local` is the default and assumes one operator: no login, one account, your
-key. If you want to host the terminal for others, set `AUTH_MODE=privy` and supply
-`PRIVY_APP_ID` — every visitor then signs in, gets their own Superior key, and sees only
-their own conversations, plans and deployments.
+The terminal is single-operator by design. It holds your API key, and every request it
+serves is you — asking you to authenticate to your own computer would add a password
+without adding a guarantee.
 
-A production build refuses to start in local mode unless you set `AUTH_MODE=local`
-explicitly. Forgetting to configure auth on a public deployment fails closed rather than
-quietly serving one shared account to the internet.
+The practical consequence: **anyone who can reach the port is you.** Keep it on
+localhost or behind something that does authentication for you. Do not put it on a
+public address as-is.
 
 ## Deploying
 
@@ -138,8 +139,11 @@ npm run build
 npm start
 ```
 
-Two things to get right when it is not on your laptop:
+Three things to get right when it is not on your laptop:
 
+- **Put authentication in front of it.** There is none built in, and the app can move
+  funds. A reverse proxy with basic auth, a VPN, or an SSH tunnel — any of them, but not
+  nothing.
 - Set `DATABASE_URL`. The embedded database lives on local disk, which serverless
   platforms do not keep between deploys.
 - Point a scheduler at `/api/cron/one-shot-sweep` every minute, with

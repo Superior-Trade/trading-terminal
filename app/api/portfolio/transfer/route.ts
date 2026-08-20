@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { resolveSuperiorAuth } from "../../../../lib/superior-key";
+import { requireSuperiorAuth } from "../../../../lib/account";
 import { fundsFrozen } from "../../../../lib/kill-switch";
 import { transferBetweenAccounts } from "../../../../lib/superior-api";
 import { track } from "../../../../lib/analytics";
@@ -21,7 +21,7 @@ export async function POST(req: Request) {
 
   let user, key;
   try {
-    ({ user, key } = await resolveSuperiorAuth(req));
+    ({ user, key } = await requireSuperiorAuth());
   } catch (e) {
     if (e instanceof Response) return e;
     throw e;
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
 
   const result = await transferBetweenAccounts(key, from, to, amount);
   track("transfer_executed", {
-    user: user.did,
+    user: user.id,
     props: { from, to, amount, ok: result.ok, detail: result.detail },
   });
   if (!result.ok) {

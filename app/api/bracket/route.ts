@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { resolveSuperiorAuth } from "../../../lib/superior-key";
+import { requireSuperiorAuth } from "../../../lib/account";
 import { track } from "../../../lib/analytics";
 import { fundsFrozen } from "../../../lib/kill-switch";
 
@@ -15,7 +15,7 @@ const API_BASE =
 
 export async function GET(req: Request) {
   try {
-    const { key } = await resolveSuperiorAuth(req);
+    const { key } = await requireSuperiorAuth();
     const res = await fetch(`${API_BASE}/v2/bracket`, {
       headers: { "x-api-key": key },
     });
@@ -33,7 +33,7 @@ export async function POST(req: Request) {
   const frozen = fundsFrozen("trade");
   if (frozen) return frozen;
   try {
-    const { key, user } = await resolveSuperiorAuth(req);
+    const { key, user } = await requireSuperiorAuth();
     const body = (await req.json()) as Record<string, unknown>;
     const res = await fetch(`${API_BASE}/v2/bracket`, {
       method: "POST",
@@ -42,7 +42,7 @@ export async function POST(req: Request) {
     });
     const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     track(res.status === 201 ? "bracket_placed" : "bracket_failed", {
-      user: user.did,
+      user: user.id,
       props: {
         pair: String(body.pair ?? ""),
         side: String(body.side ?? ""),
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
-    const { key, user } = await resolveSuperiorAuth(req);
+    const { key, user } = await requireSuperiorAuth();
     const id = new URL(req.url).searchParams.get("id");
     if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
     const res = await fetch(`${API_BASE}/v2/bracket/${encodeURIComponent(id)}`, {
@@ -70,7 +70,7 @@ export async function DELETE(req: Request) {
       headers: { "x-api-key": key },
     });
     const json = await res.json().catch(() => ({}));
-    if (res.ok) track("bracket_cancelled", { user: user.did, props: { id } });
+    if (res.ok) track("bracket_cancelled", { user: user.id, props: { id } });
     return NextResponse.json(json, { status: res.status });
   } catch (e) {
     if (e instanceof Response) return e;

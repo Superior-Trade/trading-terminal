@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { resolveSuperiorAuth } from "../../../../lib/superior-key";
+import { requireSuperiorAuth } from "../../../../lib/account";
 
 export const runtime = "nodejs";
 
@@ -8,7 +8,7 @@ const API_BASE = process.env.SUPERIOR_TRADE_API_URL ?? "https://api.superior.tra
 
 async function keyOr(req: Request): Promise<{ key: string } | Response> {
   try {
-    return await resolveSuperiorAuth(req);
+    return await requireSuperiorAuth();
   } catch (e) {
     if (e instanceof Response) return e;
     throw e;

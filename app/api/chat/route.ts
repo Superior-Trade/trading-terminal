@@ -7,9 +7,8 @@ import {
 } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { after } from "next/server";
-import { requireUser } from "../../../lib/server-auth";
 import { consumeRate, rateLimitBody } from "../../../lib/rate-limit";
-import { resolveSuperiorAuth } from "../../../lib/superior-key";
+import { currentAccount, requireSuperiorAuth } from "../../../lib/account";
 import { track } from "../../../lib/analytics";
 import { renderMemory, maybeCompact } from "../../../lib/agent-memory";
 import { clientTools, serverTools } from "../../../lib/agent-tools";
@@ -137,7 +136,7 @@ function sanitize(messages: StoredUIMessage[]): UIMessage[] {
 
 export async function POST(req: Request) {
   try {
-    const user = await requireUser(req);
+    const user = await currentAccount();
     const body = (await req.json()) as ChatRequest;
 
     const incoming =
@@ -158,7 +157,7 @@ export async function POST(req: Request) {
         | { text?: string }
         | undefined)?.text;
       track("chat_message", {
-        user: user.did,
+        user: user.id,
         props: {
           text: userText?.slice(0, 500),
           conversation: convId ?? null,
@@ -178,8 +177,8 @@ export async function POST(req: Request) {
               | { text?: string }
               | undefined)?.text
           : undefined;
-      await ensureConversation(user.did, convId, firstText?.slice(0, 48));
-      tail = await loadTail(user.did, convId);
+      await ensureConversation(user.id, convId, firstText?.slice(0, 48));
+      tail = await loadTail(user.id, convId);
     } else if (body.messages?.length) {
       tail = body.messages.slice(0, -1) as unknown as StoredUIMessage[];
     }
@@ -188,7 +187,7 @@ export async function POST(req: Request) {
     // round-trips cost one unit. Over-limit → 429 the client renders as a
     // pinned notice. consumeRate fails open (DB down → no limit).
     if (incoming.role === "user") {
-      const rl = await consumeRate(user.did, "chat", Date.now());
+      const rl = await consumeRate(user.id, "chat", Date.now());
       if (!rl.ok) {
         return new Response(JSON.stringify(rateLimitBody("chat", rl)), {
           status: 429,
@@ -230,7 +229,7 @@ export async function POST(req: Request) {
     // ~0.7s of HL calls here saves the agent an entire tool round-trip
     // (model step + continuation request) before the first plan appears.
     const [memory, pulse, ofDigest] = await Promise.all([
-      renderMemory(user.did, convId),
+      renderMemory(user.id, convId),
       body.detect === true && cc?.symbol
         ? marketContext(cc.symbol).catch(() => null)
         : Promise.resolve(null),
@@ -300,7 +299,7 @@ export async function POST(req: Request) {
 
     // Superior key resolves lazily — only turns that touch backtest/deploy/
     // pnl tools pay for it (and get a readable error if unavailable).
-    const getKey = async () => (await resolveSuperiorAuth(req)).key;
+    const getKey = async () => (await requireSuperiorAuth()).key;
 
     // The dynamic context rides INSIDE the latest user message, not as a
     // leading system message: after a long conversation about pair A, a
@@ -433,7 +432,7 @@ export async function POST(req: Request) {
         const shot =
           typeof body.screenshot === "string" ? body.screenshot.length : 0;
         track("chat_message_failed", {
-          user: user.did,
+          user: user.id,
           props: {
             reason: "stream_error",
             // Raw provider error is what identifies the fix — keep it long.
@@ -483,7 +482,7 @@ export async function POST(req: Request) {
           } catch (e) {
             console.error("chat persistence failed:", e);
           }
-          await maybeCompact(user.did, convId).catch((e) =>
+          await maybeCompact(user.id, convId).catch((e) =>
             console.error("compact failed:", e),
           );
         });

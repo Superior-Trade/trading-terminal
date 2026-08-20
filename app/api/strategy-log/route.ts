@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireUser } from "../../../lib/server-auth";
+import { currentAccount } from "../../../lib/account";
 import { logStrategy } from "../../../lib/strategy-log";
 
 export const runtime = "nodejs";
@@ -9,12 +9,12 @@ export const runtime = "nodejs";
 // Server-side generations (detect, compile) log directly — not through this.
 export async function POST(req: Request) {
   try {
-    const user = await requireUser(req);
+    const user = await currentAccount();
     const body = (await req.json()) as { plan?: unknown; symbol?: string | null };
     if (!body.plan) {
       return NextResponse.json({ error: "plan required" }, { status: 400 });
     }
-    await logStrategy(user.did, "suggest_plan", {
+    await logStrategy(user.id, "suggest_plan", {
       symbol: body.symbol ?? null,
       plan: body.plan,
     });

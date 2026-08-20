@@ -1280,7 +1280,7 @@ function RunningTab({
           // Transient (token refresh mid-flight): keep whatever is shown and
           // let the next tick retry — never latch the sign-in message while
           // the user IS signed in.
-          if (!hasDataRef.current) setError(t("loginPrompt"));
+          if (!hasDataRef.current) setError(t("apiKeyPrompt"));
           return;
         }
         hasDataRef.current = true;
@@ -1620,7 +1620,7 @@ function RunningTab({
   }, [overlayOn, overlays, pair]);
 
   if (notAuthed)
-    return <div className="p-3 font-mono text-[11px] text-white/40">{t("loginPrompt")}</div>;
+    return <div className="p-3 font-mono text-[11px] text-white/40">{t("apiKeyPrompt")}</div>;
   if (error) return <div className="p-3 font-mono text-[11px] text-white/40">{error}</div>;
   if (!items) return <div className="p-3 font-mono text-[11px] text-white/40">{t("loading")}</div>;
   if (!items.length && !brackets.length) return <SetupsEmpty variant="running" />;
@@ -2612,7 +2612,7 @@ function DetectedTab({
       </div>
       {error && (
         <div className="font-mono text-[11px] text-red-300">
-          {/unauthorized|invalid token/i.test(error) ? t("loginPrompt") : error}
+          {/unauthorized|invalid token/i.test(error) ? t("apiKeyPrompt") : error}
         </div>
       )}
       {detecting && (

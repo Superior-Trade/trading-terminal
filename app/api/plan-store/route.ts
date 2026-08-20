@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { desc, eq } from "drizzle-orm";
 import { getDb, schema } from "../../../lib/db";
-import { requireUser } from "../../../lib/server-auth";
+import { currentAccount } from "../../../lib/account";
 
 export const runtime = "nodejs";
 
@@ -10,12 +10,12 @@ export const runtime = "nodejs";
 
 export async function GET(req: Request) {
   try {
-    const user = await requireUser(req);
+    const user = await currentAccount();
     const db = getDb();
     const rows = await db
       .select()
       .from(schema.deployments)
-      .where(eq(schema.deployments.userId, user.did))
+      .where(eq(schema.deployments.userId, user.id))
       .orderBy(desc(schema.deployments.createdAt));
     return NextResponse.json({
       items: rows.map((r) => ({
@@ -39,7 +39,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const user = await requireUser(req);
+    const user = await currentAccount();
     const record = (await req.json()) as {
       deploymentId: string;
       plan: unknown;
@@ -60,7 +60,7 @@ export async function POST(req: Request) {
       .insert(schema.deployments)
       .values({
         deploymentId: record.deploymentId,
-        userId: user.did,
+        userId: user.id,
         planJson: JSON.stringify(record.plan),
         symbol: record.symbol ?? null,
         timeframe: record.timeframe ?? null,

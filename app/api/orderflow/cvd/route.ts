@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { requireUser } from "../../../../lib/server-auth";
+import { currentAccount } from "../../../../lib/account";
 import { getDb } from "../../../../lib/db";
 import { ensureRecording } from "../../../../lib/orderflow-recorder";
 
@@ -15,7 +15,7 @@ export const runtime = "nodejs";
 // `from`, so panning the chart never re-anchors the curve mid-history.
 export async function GET(req: Request) {
   try {
-    await requireUser(req);
+    await currentAccount();
     const url = new URL(req.url);
     const coin = url.searchParams.get("coin");
     if (!coin) return NextResponse.json({ error: "coin required" }, { status: 400 });

@@ -283,14 +283,10 @@ export async function withdrawQuote(key: string): Promise<WithdrawQuote> {
   };
 }
 
-/** Prepare a canonical withdrawal by sweeping idle trading wallets into the
- *  user's main Superior wallet on Hyperliquid. The tracked web-server flow
- *  performs the actual two legs:
- *
- *    Hyperliquid -> Superior managed wallet -> locked login wallet
- *
- *  Keeping the venue withdrawal out of this helper prevents Terminal V2 from
- *  bypassing the shared reservation and reconciliation machinery. */
+/** Stage a withdrawal by sweeping idle trading wallets into the account's main
+ *  Superior wallet on Hyperliquid, which is the only wallet the venue
+ *  withdrawal below can draw from. Occupied wallets are never touched — a
+ *  running strategy keeps its budget. */
 export async function prepareHyperliquidWithdrawal(
   key: string,
   amountUsd: number,
@@ -338,6 +334,59 @@ export async function prepareHyperliquidWithdrawal(
   return {
     ok: true,
     detail: `prepared $${amt.toFixed(2)} in the main Superior trading wallet`,
+  };
+}
+
+export interface WithdrawResult {
+  /** Where the USDC landed — the account's own Superior wallet on Arbitrum. */
+  destination: string | null;
+  /** Hyperliquid wallet the funds left. */
+  from: string | null;
+  amount: string;
+}
+
+/**
+ * Move USDC off Hyperliquid into this account's Superior wallet on Arbitrum.
+ *
+ * The destination is resolved by the API from the API key, not sent by us: the
+ * endpoint rejects a client-supplied external address outright (403). That is
+ * deliberate on their side, and it is the reason this is a one-hop withdrawal
+ * rather than a cash-out — see docs/withdrawals.md for how the money leaves
+ * the Superior wallet afterwards.
+ *
+ * Hyperliquid charges its own fee and the transfer takes a few minutes to
+ * arrive on Arbitrum.
+ */
+export async function withdrawToSuperiorWallet(
+  key: string,
+  amountUsd: number,
+  from?: string | null,
+): Promise<WithdrawResult> {
+  const amount = (Math.floor(amountUsd * 100) / 100).toFixed(2);
+  const res = await fetch(`${SUPERIOR_API_BASE}/v3/portfolio/hyperliquid/withdraw`, {
+    method: "POST",
+    headers: headers(key),
+    body: JSON.stringify({
+      chain: "arbitrum",
+      asset_address: ARB_USDC,
+      amount,
+      ...(from ? { from } : {}),
+    }),
+  });
+  const json = (await res.json().catch(() => ({}))) as {
+    destination?: string;
+    wallet_address?: string;
+    amount?: string;
+    message?: string;
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new Error(json.message || json.error || `withdrawal failed (${res.status})`);
+  }
+  return {
+    destination: json.destination ?? null,
+    from: json.wallet_address ?? from ?? null,
+    amount: json.amount ?? amount,
   };
 }
 

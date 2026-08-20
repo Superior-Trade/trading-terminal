@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { resolveSuperiorAuth } from "../../../lib/superior-key";
+import { requireSuperiorAuth } from "../../../lib/account";
 
 
 export const runtime = "nodejs";
@@ -10,7 +10,7 @@ const API_BASE =
 export async function GET(req: Request) {
   let apiKey: string;
   try {
-    ({ key: apiKey } = await resolveSuperiorAuth(req));
+    ({ key: apiKey } = await requireSuperiorAuth());
   } catch (e) {
     if (e instanceof Response) return e;
     throw e;
