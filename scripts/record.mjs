@@ -23,8 +23,8 @@ const H = 900;
 // Measured off the 1600x900 layout: the setups panel starts at x=1160, the
 // header is 56 tall. Cropping tight is what keeps these GIFs small enough to
 // commit while staying readable — scaling dense UI down does not work.
-const CHART = "1120:800:30:64";
-const PANEL = "436:790:1160:64";
+const CHART = "2240:1600:60:128";
+const PANEL = "872:1580:2320:128";
 
 mkdirSync(OUT, { recursive: true });
 rmSync(TMP, { recursive: true, force: true });
@@ -47,7 +47,7 @@ async function session(browser) {
   const ctx = await browser.newContext({
     viewport: { width: W, height: H },
     colorScheme: "dark",
-    recordVideo: { dir: TMP, size: { width: W, height: H } },
+    recordVideo: { dir: TMP, size: { width: W * 2, height: H * 2 } },
   });
   await ctx.addInitScript(() => window.localStorage.setItem("cg-privacy", "1"));
   await ctx.addInitScript(HIDE_DEV_OVERLAY);
@@ -107,7 +107,15 @@ function gif(src, out, { crop, start, dur, width, fps = 8, colors = 48 }) {
   return kb;
 }
 
-const browser = await chromium.launch();
+// Playwright records video at CSS-pixel resolution — `deviceScaleFactor` does
+// not change it, and `recordVideo.size` only rescales what was already
+// captured. Measured: identical edge energy at dsf 1 and 2. Forcing the scale
+// at the browser level is what actually renders retina, and it measured 5.7x
+// the edge energy on the same panel. Crop regions below are therefore in
+// DEVICE pixels: twice the CSS numbers.
+const browser = await chromium.launch({
+  args: ["--force-device-scale-factor=2", "--high-dpi-support=1"],
+});
 const made = [];
 
 // ── 1. Drawing on the chart ────────────────────────────────────────────
@@ -133,7 +141,7 @@ try {
   await page.mouse.up();
   await page.waitForTimeout(2_600);
   const v = await finish(ctx, page, "draw");
-  gif(v, `${OUT}/loop-1-draw.gif`, { crop: CHART, start: t1 - 0.4, dur: 3.8, width: 700 });
+  gif(v, `${OUT}/loop-1-draw.gif`, { crop: CHART, start: t1 - 0.4, dur: 3.8, width: 760 });
   made.push("loop-1-draw.gif");
 } catch (e) {
   console.log(`    ! skipped: ${String(e).slice(0, 110)}`);
@@ -151,7 +159,7 @@ try {
   // The right-hand panel only: the progress steps and the cards landing.
   // The detect itself is a minute of a spinner. Show the request going out,
   // then jump to the cards landing.
-  gif(v, `${OUT}/loop-2-detect.gif`, { crop: PANEL, start: at() - 5.0, dur: 4.4, width: 500 });
+  gif(v, `${OUT}/loop-2-detect.gif`, { crop: PANEL, start: at() - 5.0, dur: 4.4, width: 520 });
   made.push("loop-2-detect.gif");
 } catch (e) {
   console.log(`    ! skipped: ${String(e).slice(0, 110)}`);
@@ -171,7 +179,7 @@ try {
   await page.waitForSelector("text=/Showing .* setup/i", { timeout: 25_000 });
   await page.waitForTimeout(3_500);
   const v = await finish(ctx, page, "plan");
-  gif(v, `${OUT}/loop-3-plan.gif`, { crop: CHART, start: t3 - 0.4, dur: 3.8, width: 700 });
+  gif(v, `${OUT}/loop-3-plan.gif`, { crop: CHART, start: t3 - 0.4, dur: 3.8, width: 760 });
   made.push("loop-3-plan.gif");
 } catch (e) {
   console.log(`    ! skipped: ${String(e).slice(0, 110)}`);
@@ -191,7 +199,7 @@ try {
   }
   await page.waitForTimeout(1_500);
   const v = await finish(ctx, page, "running");
-  gif(v, `${OUT}/loop-4-running.gif`, { crop: PANEL, start: t4 - 0.3, dur: 3.8, width: 500 });
+  gif(v, `${OUT}/loop-4-running.gif`, { crop: PANEL, start: t4 - 0.3, dur: 3.8, width: 520 });
   made.push("loop-4-running.gif");
 } catch (e) {
   console.log(`    ! skipped: ${String(e).slice(0, 110)}`);

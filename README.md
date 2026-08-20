@@ -190,8 +190,9 @@ measured against.
 
 ## Contributing
 
-Issues and pull requests welcome — [CONTRIBUTING.md](CONTRIBUTING.md). The code that
-moves money gets read closely; bring a test.
+Issues and pull requests welcome — [CONTRIBUTING.md](CONTRIBUTING.md), and
+[AGENTS.md](AGENTS.md) if you are pointing a coding agent at this. The code that moves
+money gets read closely; bring a test.
 
 What merges here also ships to the hosted build — it runs this repository.
 

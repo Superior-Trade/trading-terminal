@@ -1,0 +1,26 @@
+# This application places real orders with real money, so a known-vulnerable
+# dependency is not a papercut. Weekly is frequent enough to stay current
+# without turning the PR list into noise.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # One PR per ecosystem rather than per package — these move together and
+      # reviewing them separately wastes everyone's time.
+      react:
+        patterns: ["react", "react-dom", "@types/react", "@types/react-dom"]
+      next:
+        patterns: ["next", "eslint-config-next", "@next/*"]
+      ai-sdk:
+        patterns: ["ai", "@ai-sdk/*", "@openrouter/*"]
+      drizzle:
+        patterns: ["drizzle-orm", "drizzle-kit"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
