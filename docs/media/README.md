@@ -4,9 +4,10 @@
 
 | File | Source | Used by |
 |---|---|---|
-| `terminal.png` | 20s — the ask and the answer in one frame | README hero |
-| `setup-on-chart.png` | 36s — the plan drawn as entry/stop/target lines | README, "the loop" |
-| `demo.mp4` | the full 45s, 1664x855, 7.2 MB | **gitignored** — see below |
+| `wordmark.png` | cropped from the app header at 2x | README hero |
+| `terminal.png` | live capture: chart + ranked setups | README hero |
+| `deployments.png` | live capture: the running-setups panel | README |
+| `demo.mp4` | the launch video, 1664x855 | **gitignored** — see below |
 
 Cut from the launch video
 ([@SuperiorTrade_](https://x.com/SuperiorTrade_/status/2083623018425921633)), which frames
