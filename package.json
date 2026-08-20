@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": false,
   "license": "Apache-2.0",
-  "description": "Draw on the chart, describe the idea, and an AI agent turns it into a backtested strategy you can run live.",
+  "description": "Literally draw where you think the market is going. Get a fully managed trade back — an AI trading terminal for Hyperliquid.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Superior-Trade/trading-terminal.git"

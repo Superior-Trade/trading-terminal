@@ -1,12 +1,13 @@
 <div align="center">
 
-<img src="public/logo-dark.png" alt="Trading Terminal" width="300">
+<img src="docs/media/wordmark.png" alt="Superior Trade" width="290">
 
-### Draw on the chart. Describe the idea. Get a bot that trades it.
+### Literally draw where you think the market is going.<br>Get a fully managed trade back.
 
-An AI trading terminal for Hyperliquid. You mark up a chart and say what you think; it
-writes a real Freqtrade strategy, refuses to ship the unsafe ones, backtests it, and runs
-it live.
+An AI trading terminal for Hyperliquid. Sketch your read straight onto the chart; the
+agent turns it into a real setup with entry, stop and target, ranks more setups beside
+it, and writes the Freqtrade strategy that trades the one you pick — refusing the unsafe
+ones on the way.
 
 Run it yourself, or use the hosted build at
 [terminal.superior.trade](https://terminal.superior.trade).
