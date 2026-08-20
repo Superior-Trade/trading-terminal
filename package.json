@@ -29,7 +29,8 @@
     "db:push": "drizzle-kit push",
     "test:e2e": "node evals/e2e.mjs",
     "preview": "node scripts/preview-readme.mjs",
-    "screenshot": "node scripts/screenshot.mjs"
+    "screenshot": "node scripts/screenshot.mjs",
+    "record": "node scripts/record.mjs"
   },
   "dependencies": {
     "@ai-sdk/react": "^4.0.16",

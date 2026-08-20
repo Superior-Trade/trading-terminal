@@ -27,3 +27,6 @@ docs/media/demo.mp4
 
 # local markdown preview output
 .preview.html
+
+# recording scratch
+.rec/

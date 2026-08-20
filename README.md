@@ -28,6 +28,8 @@ Run it yourself, or use the hosted build at
 
 > *"HYPE keeps rejecting off this line. Is there a mean-reversion trade here on the 15m?"*
 
+<img src="docs/media/loop-1-draw.gif" alt="A trendline being drawn across the candles" width="700">
+
 **2. The agent reads your actual chart** — your drawings, the visible range, the
 indicators you have plotted, and a screenshot of it — and answers with a plan:
 
@@ -37,6 +39,8 @@ indicators you have plotted, and a screenshot of it — and answers with a plan:
 | Stop | 36.90 *(−3.4%)* |
 | Target | 41.05 *(+7.5%)* |
 | Invalidation | 15m close below 36.50 |
+
+<img src="docs/media/loop-2-detect.gif" alt="Ranked setups arriving in the panel, each with entry, stop, target and an R multiple" width="500">
 
 **3. You say deploy.** It writes the strategy, and the validator reads it before
 anything else does:
@@ -56,6 +60,8 @@ def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFram
 
 **4. It runs.** Live PnL, an auto-stop timer if the edge is time-boxed, and an inbox
 that tells you when something happened.
+
+<img src="docs/media/loop-4-running.gif" alt="The running-setups panel, each deployment with its state and controls" width="500">
 
 <div align="center">
 
