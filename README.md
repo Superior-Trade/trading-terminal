@@ -82,20 +82,21 @@ getting your own TradingView access before the chart will build.
 The interesting part of this repo is not that a model writes Python. It is what happens
 between "the model wrote it" and "it is trading your funds".
 
-Every generated strategy is parsed and checked before it can be submitted. A failure
-does not surface as a stack trace — the complaints go back to the model, which rewrites
-the strategy, and the loop repeats. A few of the rules, in the validator's own words:
+Every generated strategy is parsed and checked before it can be submitted. A rejection
+is not an error you see — the complaints go back to the model, which rewrites the
+strategy, and the loop repeats until it passes. Some of what gets caught:
 
-- `code uses shift(-N) — that reads FUTURE candles (lookahead bias); backtests lie and live behaves differently`
-- `config.stoploss must be negative — freqtrade stops are always negative, for shorts too`
-- `trailing_stop_positive ... at 10x looks unscaled (it is leveraged PnL, like stoploss) — multiply the price % by leverage`
-- `entry conditions must include the (dataframe['volume'] > 0) guard so signals never fire on dead candles`
-- `startup_candle_count is too low — use ≥ 3× the longest indicator lookback`
-- `code uses .iloc[...] inside populate_* — per-row indexing behaves differently live vs backtest`
+| The check | What it prevents |
+|---|---|
+| No `shift(-N)` in `populate_*` | Reading future candles. The backtest looks superb and live behaves nothing like it |
+| Stops are leverage-scaled | A 3.7% price stop written raw at 10× is ten times tighter than intended. The bot churns fees until the balance is gone |
+| Entries gate on `volume > 0` | Signals firing on dead candles |
+| `startup_candle_count` ≥ 3× the longest lookback | Indicators are NaN live, so the bot silently never trades — the pod stays healthy and nothing happens |
+| TA-Lib tuples indexed by position | `bollinger['upperband']` raises on every candle. One live strategy did this for ten hours while its entry condition was met seven times |
 
-Most of these came from strategies that reached production and cost real money. Each one
-is a scar. [docs/strategy-pipeline.md](docs/strategy-pipeline.md) has the full set and
-explains the repair loop.
+Most of these are scars: they exist because a strategy reached production without them.
+[docs/strategy-pipeline.md](docs/strategy-pipeline.md) has the full set and explains the
+repair loop.
 
 ## Features
 
@@ -108,12 +109,6 @@ explains the repair loop.
 | **Execution** | Live deployments, bracket orders for one-shot plans, position sizing, leverage caps, time-boxed auto-stop |
 | **Funds** | Deposit, transfer between accounts, consolidate idle wallets, withdraw |
 | **Self-hosted only** | Embedded Postgres, no login, no telemetry unless you turn it on, every prompt editable |
-
-Two differences worth knowing before you choose. Self-hosted has **no login** — the API
-key is the identity — and it withdraws **one hop**, from Hyperliquid to your Superior
-wallet; the final hop to a wallet you hold the keys for needs a signed-in session, and
-[docs/withdrawals.md](docs/withdrawals.md) explains why that is deliberate.
-[The hosted terminal](https://terminal.superior.trade) does both.
 
 <a id="run-it-yourself"></a>
 
@@ -151,18 +146,13 @@ default.
 
 ## Money
 
-This places real orders with real funds by design.
+This places real orders with real funds by design. The validator above catches the
+mistakes we know about, not the ones we don't — so read what the agent writes before you
+deploy it, and start on testnet (`NEXT_PUBLIC_HL_NETWORK=testnet`) or with an amount you
+would shrug at.
 
-- **Read the strategies before you deploy them.** The validator catches the mistakes we
-  know about, not the ones we don't.
-- **Start on testnet** (`NEXT_PUBLIC_HL_NETWORK=testnet`) or with an amount you would
-  shrug at.
-- **A backtest is not a prediction.** Neither is the agent's reasoning.
-- **Self-hosted has no login** — anyone who can reach the port can trade with your key.
-  Fine on localhost, dangerous anywhere else. See [SECURITY.md](SECURITY.md).
-  (The hosted terminal authenticates properly; this only applies to a copy you run.)
-
-Not investment advice. No promise of profit. You are responsible for what you run.
+A backtest is not a prediction, and neither is the agent's reasoning. Not investment
+advice, no promise of profit, and you are responsible for what you run.
 
 ## Documentation
 
