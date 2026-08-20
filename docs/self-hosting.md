@@ -2,6 +2,10 @@
 
 Configuration, storage, and what changes when it is not on your laptop.
 
+None of this is required to use the terminal —
+[terminal.superior.trade](https://terminal.superior.trade) is the same application,
+hosted, with a login and nothing to install. This document is for running your own copy.
+
 ## Configuration
 
 `.env.example` documents 38 variables. **Two have no default:**

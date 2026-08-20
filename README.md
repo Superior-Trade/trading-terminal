@@ -4,13 +4,17 @@
 
 ### Draw on the chart. Describe the idea. Get a bot that trades it.
 
-A self-hosted AI trading terminal for Hyperliquid. You mark up a chart and say what you
-think; it writes a real Freqtrade strategy, refuses to ship the unsafe ones, backtests
-it, and runs it live.
+An AI trading terminal for Hyperliquid. You mark up a chart and say what you think; it
+writes a real Freqtrade strategy, refuses to ship the unsafe ones, backtests it, and runs
+it live.
 
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Node](https://img.shields.io/badge/node-%E2%89%A520.9-brightgreen.svg)](https://nodejs.org)
-[![Next.js](https://img.shields.io/badge/Next.js-16-black.svg)](https://nextjs.org)
+**[→ Open the terminal at terminal.superior.trade](https://terminal.superior.trade)**
+&nbsp;&nbsp;·&nbsp;&nbsp; hosted, nothing to install
+
+[![Live](https://img.shields.io/badge/try_it-terminal.superior.trade-a3e635?style=flat-square)](https://terminal.superior.trade)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg?style=flat-square)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%E2%89%A520.9-brightgreen.svg?style=flat-square)](https://nodejs.org)
+[![Next.js](https://img.shields.io/badge/Next.js-16-black.svg?style=flat-square)](https://nextjs.org)
 
 <img src="docs/media/terminal-loop.gif" alt="Drawing a path on the chart, scanning it, and getting deployable setups back" width="900">
 
@@ -58,6 +62,44 @@ that tells you when something happened.
 *The plan is not just text — entry, stop and target are drawn on the chart you are
 looking at, and every card carries its own reasoning, R multiple and confidence tier.*
 
+## Two ways to use it
+
+**Most people want the first one.**
+
+<table>
+<tr>
+<th width="50%">Hosted — <a href="https://terminal.superior.trade">terminal.superior.trade</a></th>
+<th width="50%">This repository</th>
+</tr>
+<tr valign="top">
+<td>
+
+Sign in and trade. No install, no keys to manage, no waiting on anyone.
+
+- Nothing to set up — the chart is already there
+- Managed accounts, deposits and full withdrawals
+- Always the current version
+
+</td>
+<td>
+
+Run it on your own machine, read every line, change whatever you like.
+
+- Your keys, your machine, your data
+- Modify the agent, the prompts, the safety rules
+- Needs your own TradingView access ([a day or two](docs/charting-library.md))
+
+</td>
+</tr>
+<tr>
+<td align="center"><b><a href="https://terminal.superior.trade">Open the terminal →</a></b></td>
+<td align="center"><b><a href="#run-it-yourself">Run it yourself ↓</a></b></td>
+</tr>
+</table>
+
+Both talk to the same [Superior Trade API](https://api.superior.trade/docs) and trade the
+same accounts. The hosted app is this code with a login in front of it.
+
 ## What actually stops you losing money
 
 The interesting part of this repo is not that a model writes Python. It is what happens
@@ -87,10 +129,21 @@ explains the repair loop.
 | **Setups** | Scan a chart for plans, or design one in conversation. Entry, stop, target, invalidation, confidence tier |
 | **Strategies** | Freqtrade code generation, deterministic safety validation, automatic repair, historical backtests |
 | **Execution** | Live deployments, bracket orders for one-shot plans, position sizing, leverage caps, time-boxed auto-stop |
-| **Funds** | Deposit, transfer between accounts, consolidate idle wallets, withdraw ([one hop](docs/withdrawals.md)) |
-| **Local** | Embedded Postgres, no login, no telemetry unless you turn it on |
+| **Funds** | Deposit, transfer between accounts, consolidate idle wallets, withdraw |
+| **Self-hosted only** | Embedded Postgres, no login, no telemetry unless you turn it on, every prompt editable |
 
-## Setup
+Two differences worth knowing before you choose. Self-hosted has **no login** — the API
+key is the identity — and it withdraws **one hop**, from Hyperliquid to your Superior
+wallet; the final hop to a wallet you hold the keys for needs a signed-in session, and
+[docs/withdrawals.md](docs/withdrawals.md) explains why that is deliberate.
+[The hosted terminal](https://terminal.superior.trade) does both.
+
+<a id="run-it-yourself"></a>
+
+## Run it yourself
+
+Only if you want to. [terminal.superior.trade](https://terminal.superior.trade) is the
+same terminal with none of this.
 
 **Two keys.** Nothing else to sign up for.
 
@@ -121,6 +174,10 @@ default.
 > your GitHub account is granted the repository, `npm run setup:charts` pulls it in.
 > Until then the build stops with instructions. See
 > [docs/charting-library.md](docs/charting-library.md).
+>
+> The hosted terminal has no such wait — it is already licensed.
+> [Open it now](https://terminal.superior.trade) and come back to this when you want the
+> code.
 
 ## Money
 
@@ -131,8 +188,9 @@ This places real orders with real funds by design.
 - **Start on testnet** (`NEXT_PUBLIC_HL_NETWORK=testnet`) or with an amount you would
   shrug at.
 - **A backtest is not a prediction.** Neither is the agent's reasoning.
-- **There is no login** — anyone who can reach the port can trade with your key. Fine on
-  localhost, dangerous anywhere else. See [SECURITY.md](SECURITY.md).
+- **Self-hosted has no login** — anyone who can reach the port can trade with your key.
+  Fine on localhost, dangerous anywhere else. See [SECURITY.md](SECURITY.md).
+  (The hosted terminal authenticates properly; this only applies to a copy you run.)
 
 Not investment advice. No promise of profit. You are responsible for what you run.
 
@@ -168,6 +226,9 @@ see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Issues and pull requests welcome — [CONTRIBUTING.md](CONTRIBUTING.md). The code that
 moves money gets read closely; bring a test.
+
+Everything merged here ships to [terminal.superior.trade](https://terminal.superior.trade)
+as well — the hosted terminal runs this repository.
 
 ## License
 

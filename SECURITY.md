@@ -32,6 +32,10 @@ The code in this repository:
 Out of scope: the Superior Trade API, Hyperliquid, OpenRouter and TradingView.
 Report those to the people who run them.
 
+This policy covers the code in this repository. The hosted terminal at
+terminal.superior.trade runs the same code with authentication in front of it; report
+issues with either to the address above.
+
 ## Running this yourself
 
 A few things worth knowing if you host it:
