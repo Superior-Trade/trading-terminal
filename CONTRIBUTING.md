@@ -15,6 +15,19 @@ npm run dev
 The embedded database creates itself on first run, so there is nothing else to
 provision. Delete `./.data/` to start from a blank one.
 
+## Previewing the docs
+
+Editor markdown previews use their own flavour and usually cannot resolve
+repository-relative image paths, so the README looks empty in them.
+
+```bash
+npm run preview                        # README.md
+npm run preview docs/architecture.md   # any other file
+```
+
+That posts the file to GitHub's own rendering API and opens the result in your
+browser, images and all. Nothing is uploaded anywhere — the images load from disk.
+
 ## Before you open a pull request
 
 ```bash

@@ -24,3 +24,6 @@ public/static/datafeeds/
 
 # staged for upload to GitHub's CDN, never committed (see docs/media/README.md)
 docs/media/demo-github.mp4
+
+# local markdown preview output
+.preview.html

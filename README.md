@@ -213,6 +213,7 @@ npm test              # unit tests
 npm run test:e2e      # 19 checks against a running server, nothing mocked
 npm run check-types
 npm run lint
+npm run preview       # render README.md the way GitHub will, images and all
 ```
 
 `npm run test:e2e` drives the whole app — boot, database, the Superior Trade API, market

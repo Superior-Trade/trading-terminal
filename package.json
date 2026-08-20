@@ -27,7 +27,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
-    "test:e2e": "node evals/e2e.mjs"
+    "test:e2e": "node evals/e2e.mjs",
+    "preview": "node scripts/preview-readme.mjs"
   },
   "dependencies": {
     "@ai-sdk/react": "^4.0.16",
