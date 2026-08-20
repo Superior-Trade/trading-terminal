@@ -23,7 +23,7 @@ public/static/datafeeds/
 .vscode/
 
 # staged for upload to GitHub's CDN, never committed (see docs/media/README.md)
-docs/media/demo-github.mp4
+docs/media/demo.mp4
 
 # local markdown preview output
 .preview.html

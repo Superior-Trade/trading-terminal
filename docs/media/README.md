@@ -2,24 +2,73 @@
 
 ## What is here
 
-| File | Where it came from | Used by |
+| File | Source | Used by |
 |---|---|---|
-| `terminal-loop.gif` | 35.0–40.5s of the launch video, 10 fps, 760 px, 1.5 MB | README hero |
-| `terminal.png` | 36s — plan drawn on the chart, two ranked setups | README, "the loop" |
-| `setup-cards.png` | 26s — setup cards in detail | spare |
-| `demo-github.mp4` | the full 46s video, 1280 px, 2.9 MB | **gitignored** — see below |
+| `terminal.png` | 20s — the ask and the answer in one frame | README hero |
+| `setup-on-chart.png` | 36s — the plan drawn as entry/stop/target lines | README, "the loop" |
+| `demo.mp4` | the full 45s, 1664x855, 7.2 MB | **gitignored** — see below |
 
-All of them are cut from the launch video
+Cut from the launch video
 ([@SuperiorTrade_](https://x.com/SuperiorTrade_/status/2083623018425921633)), which frames
-the app inside a marketing mockup on a gradient background. They are cropped to
-`1672×872+130+104`, which is the app and nothing else.
+the app inside a marketing mockup on a gradient background.
 
-**Two privacy passes were applied:** account balances were already masked (privacy mode
-was on during the recording), and the wallet-address pill in the header is blurred at
-`170×34+1490+16`. Re-check both if you re-cut from a different source.
+### Cropping
 
-`demo-github.mp4` is deliberately not committed. It exists to be dragged into a GitHub
-comment — see below — so the full video never costs anyone a clone.
+The app window is at **`crop=1664:855:128:113`** on the 1920x1080 source. That was measured,
+not guessed: build a per-column and per-row profile of "fraction of pixels that are dark"
+and the window is the contiguous band where it stays above ~0.55. Do not try to find it by
+scanning inward for the first dark run — the app's own header is dark too, so that finds
+the content area and silently cuts the header and the toolbar off.
+
+Verify a new crop by checking the four corners are app-dark rather than gradient-bright.
+
+### Privacy
+
+Two passes, both required:
+
+1. **Balances** were already masked because privacy mode was on during the recording —
+   the eye toggle in the header.
+2. **The wallet address** is not covered by that, and is blurred at
+   `crop=178:40:1492:4` within the cropped frame. Applied at full resolution before any
+   scaling.
+
+Re-check both if you re-cut from a different source.
+
+### Why there is no GIF
+
+There was one, and it was wrong. Dense UI text does not survive being scaled down, and a
+GIF large enough to stay readable is not something to put in a repository:
+
+| Width | Size for 5 seconds |
+|---|---|
+| 760 px | 1.5 MB — unreadable |
+| 1200 px | 7.4 MB |
+| 1360 px | 9.7 MB |
+| 1664 px | 10.4 MB |
+
+So the inline images are sharp PNGs at native resolution, and motion lives in the video
+below. A still that you can read beats a loop that you cannot.
+
+### The video
+
+`demo.mp4` is 1664x855 with audio, cropped to the app, outro trimmed, 7.2 MB — under
+GitHub's 10 MB attachment limit for free accounts on purpose.
+
+It is **deliberately not committed**. Drag it into any GitHub issue, PR or release comment
+(do not submit — the upload alone is enough) and you get a permanent CDN URL. Paste that
+URL bare on its own line in the README and GitHub renders a real player:
+
+```markdown
+https://github.com/user-attachments/assets/....
+```
+
+Nothing enters the repository, so no clone ever pays for it. That is the whole reason to
+prefer this over committing a file.
+
+Renders on github.com only — npm, mirrors and local editors show a bare link, which is why
+the sharp stills carry the README on their own.
+
+---
 
 ## What is still missing
 
@@ -44,65 +93,6 @@ Dark theme, a real market with live candles. An empty chart sells nothing.
 
 ---
 
-## Video
-
-Three ways to put a video in a README. They are not equivalent.
-
-### 1. GitHub-hosted upload — the good one
-
-Drag an `.mp4` or `.mov` into any issue, PR, or release comment on GitHub. Do not submit
-it — the upload alone gives you a permanent CDN URL. Paste that URL **bare on its own
-line** in the README and GitHub renders a real player, with controls and audio.
-
-```markdown
-https://github.com/user-attachments/assets/....
-```
-
-- **Nothing enters the repository.** No clone pays for it, ever. This is the whole reason
-  to prefer it.
-- Limits: 10 MB on free accounts, 100 MB on Pro/Team/Enterprise. `.mp4` and `.mov`.
-- Renders on github.com only — npm, mirrors and local editors show a bare link.
-
-### 2. An animated GIF — the portable one
-
-Works everywhere: github.com, npm, forks, offline editors, anything that renders
-markdown. No controls, no audio, and the file is large for what it is.
-
-Keep it to **8–12 seconds** of the single best moment — a level drawn, the plan appearing.
-Not the whole flow. Target under 3 MB; `gifski` from an mp4 gets decent quality at that
-size.
-
-A GIF committed to the repo is permanent — git history keeps it even if you delete the
-file later. Compress before the first commit, not after.
-
-### 3. A thumbnail linking out — the fallback
-
-```markdown
-[![Watch the demo](docs/media/thumb.png)](https://youtu.be/...)
-```
-
-Universal and cheap, but it is a click away, and most people do not click.
-
-### What to do here
-
-**Both 1 and 2.** A short GIF inline at the top so the README works everywhere, and the
-full walkthrough as a GitHub-hosted video underneath it. That is what the repositories
-you admire are doing.
-
-### What the video should show
-
-The loop, in about 40 seconds, no narration needed:
-
-1. A chart. Draw a level on it.
-2. Ask the question in plain language.
-3. The plan card appears — entry, stop, target, invalidation.
-4. Deploy. The strategy compiles and the validator passes it.
-5. It appears in running setups with live PnL.
-
-Resist showing the settings menu, the theme picker, or anything that is not the loop.
-
----
-
 ## Screenshots
 
 | File | Shot |
@@ -116,7 +106,7 @@ Resist showing the settings menu, the theme picker, or anything that is not the 
 comment in the README with:
 
 ```markdown
-<img src="docs/media/terminal.png" alt="The terminal" width="900">
+<img src="docs/media/your-file.png" alt="What it shows" width="900">
 ```
 
 Keep each under ~500 KB. PNG for UI, run it through an optimiser first.
