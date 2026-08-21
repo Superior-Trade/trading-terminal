@@ -62,7 +62,7 @@
     "eslint-config-next": "16.1.6",
     "playwright": "^1.62.1",
     "tailwindcss": "^4",
-    "typescript": "^5.9",
+    "typescript": "^7.0",
     "vitest": "^3.2.6"
   }
 }
