@@ -15,8 +15,8 @@ outside services. Nothing else runs on your machine.
      │          (your key)
      ├──────►  Superior Trade API   backtests, deployments, accounts, funding
      │          (your key)          — hosted; not in this repo
-     ├──────►  Hyperliquid          candles, prices, positions, order flow
-     │          (public)
+     ├──────►  Hyperliquid          candles, prices, positions, order flow,
+     │          (public)             liquidation levels
      └──────►  embedded Postgres    conversations, plans, order-flow history
                 (./.data)
 ```

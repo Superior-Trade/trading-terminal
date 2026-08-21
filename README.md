@@ -78,8 +78,8 @@ repository with a login in front of it. Both talk to the same
 [Superior Trade API](https://api.superior.trade/docs) and trade the same accounts, so the
 choice is about who runs the process, not about what you get.
 
-Running your own copy means your keys stay on your machine and every prompt and safety
-rule is yours to change. It also means no login (see [SECURITY.md](SECURITY.md)),
+Running your own copy means your keys stay on your machine, nothing is reported anywhere
+unless you switch it on, and every prompt and safety rule is yours to change. It also means no login (see [SECURITY.md](SECURITY.md)),
 withdrawals that stop one hop short (see [docs/withdrawals.md](docs/withdrawals.md)), and
 getting your own TradingView access before the chart will build.
 
@@ -104,18 +104,6 @@ Most of these are scars: they exist because a strategy reached production withou
 [docs/strategy-pipeline.md](docs/strategy-pipeline.md) has the full set and explains the
 repair loop.
 
-## Features
-
-| | |
-|---|---|
-| **Chart** | TradingView Advanced Charts, Hyperliquid + Lighter datafeeds, order-flow footprint, liquidation heatmap, tier-ranked indicators |
-| **Agent** | Reads your drawings and a screenshot of the chart; draws back — levels, zones, trendlines, channels, fibs |
-| **Setups** | Scan a chart for plans, or design one in conversation. Entry, stop, target, invalidation, confidence tier |
-| **Strategies** | Freqtrade code generation, deterministic safety validation, automatic repair, historical backtests |
-| **Execution** | Live deployments, bracket orders for one-shot plans, position sizing, leverage caps, time-boxed auto-stop |
-| **Funds** | Deposit, transfer between accounts, consolidate idle wallets, withdraw |
-| **Self-hosted only** | Embedded Postgres, no login, no telemetry unless you turn it on, every prompt editable |
-
 <a id="run-it-yourself"></a>
 
 ## Run it yourself
@@ -136,11 +124,9 @@ npm run dev                    # → http://localhost:3200
 | `SUPERIOR_TRADE_API_KEY` | [superior.trade](https://superior.trade) → Account → API keys |
 | `OPENROUTER_API_KEY` | [openrouter.ai/keys](https://openrouter.ai/keys) |
 
-No database to provision, no account to create, no login screen. An embedded Postgres
-writes to `./.data/` and migrates itself on first boot.
-
-`.env.example` documents 38 variables. Those two are the only ones without a working
-default.
+No database to provision and no account to create — an embedded Postgres writes to
+`./.data/` and migrates itself on first boot. `.env.example` documents 38 more variables,
+all with working defaults.
 
 > [!IMPORTANT]
 > **The chart needs TradingView's approval, and that takes a day or two.**
@@ -170,7 +156,7 @@ advice, no promise of profit, and you are responsible for what you run.
 | [docs/withdrawals.md](docs/withdrawals.md) | How money gets out, and how far this repo takes it |
 | [docs/self-hosting.md](docs/self-hosting.md) | Configuration, databases, running it somewhere else |
 
-## Development
+## Development and contributing
 
 ```bash
 npm run dev           # dev server on :3200
@@ -188,13 +174,10 @@ irreversible actions and it stops short of both.
 `evals/` holds the agent evaluations, including the suites a prompt change should be
 measured against.
 
-## Contributing
-
 Issues and pull requests welcome — [CONTRIBUTING.md](CONTRIBUTING.md), and
 [AGENTS.md](AGENTS.md) if you are pointing a coding agent at this. The code that moves
-money gets read closely; bring a test.
-
-What merges here also ships to the hosted build — it runs this repository.
+money gets read closely, so bring a test; what merges here also ships to the hosted
+build.
 
 ## License
 
