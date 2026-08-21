@@ -1,5 +1,15 @@
+import path from "path";
+import { existsSync } from "fs";
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
+
+// TradingView's Advanced Charts cannot be redistributed, so a fresh clone does
+// not have it. Rather than fail the build, detect it here and let the app fall
+// back to the Lightweight Charts preview. This is the only place that can make
+// the call — the answer has to reach the browser, so it rides an env var, and
+// the import path is aliased to a stub so the bundler still resolves it.
+const CHARTS_DIR = path.join(process.cwd(), "public", "static", "charting_library");
+const HAS_ADVANCED_CHARTS = existsSync(path.join(CHARTS_DIR, "charting_library.js"));
 
 // Error monitoring is opt-in. Without SENTRY_ORG + SENTRY_PROJECT the config
 // below is never applied, so a self-hosted build uploads nothing anywhere.
@@ -9,6 +19,7 @@ const isVercelPreview =
   process.env.VERCEL === "1" && process.env.VERCEL_ENV !== "production";
 
 const nextConfig: NextConfig = {
+  env: { NEXT_PUBLIC_HAS_ADVANCED_CHARTS: HAS_ADVANCED_CHARTS ? "1" : "0" },
   // Database drivers ship native bindings (pg) and a WASM payload (PGlite);
   // both must be required at runtime rather than walked by the bundler.
   serverExternalPackages: ["pg", "@electric-sql/pglite"],
@@ -76,6 +87,15 @@ const nextConfig: NextConfig = {
       ...config.resolve.alias,
       "@stripe/crypto": false,
       "@farcaster/mini-app-solana": false,
+      // Without the real library present, point its two import paths at a stub
+      // so trading-chart.tsx still compiles. Nothing calls into it — the app
+      // mounts the preview chart instead.
+      ...(HAS_ADVANCED_CHARTS
+        ? {}
+        : {
+            [path.join(CHARTS_DIR)]: path.join(process.cwd(), "components", "chart", "charting-library-stub.ts"),
+            [path.join(CHARTS_DIR, "datafeed-api")]: path.join(process.cwd(), "components", "chart", "charting-library-stub.ts"),
+          }),
     };
     return config;
   },

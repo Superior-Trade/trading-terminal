@@ -1,32 +1,32 @@
-// TradingView's Advanced Charts library is licensed, not redistributable, so
-// it cannot be vendored into this repo. It has to come from TradingView, to
-// you, under their terms — see docs/charting-library.md.
+// Reports which chart this build will use.
 //
-// Without it the build fails inside webpack with an unhelpful "Module not
-// found: ../../public/static/charting_library". This turns that into an
-// instruction.
+// This used to abort the build. It no longer does: the terminal falls back to
+// the Lightweight Charts preview, which ships in this repository under
+// Apache-2.0, so a fresh clone runs without waiting on TradingView's approval.
+// The message is still worth printing, because the preview gives up real
+// capability and someone who does not know that will read it as broken.
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
-const dir = join(process.cwd(), "public", "static", "charting_library");
-const entry = join(dir, "charting_library.js");
+const entry = join(process.cwd(), "public", "static", "charting_library", "charting_library.js");
 
-if (!existsSync(entry)) {
-  console.error(
+if (existsSync(entry)) {
+  console.log("  chart: TradingView Advanced Charts");
+} else {
+  console.log(
     [
       "",
-      "  TradingView Advanced Charts is not installed.",
+      "  chart: Lightweight Charts (preview)",
       "",
-      "  The chart is the one part of this terminal we are not allowed to ship:",
-      "  TradingView licenses it directly to you, free, and it takes a day or two",
-      "  to be granted.",
+      "  TradingView Advanced Charts is not installed, so the terminal will run",
+      "  its preview chart. Everything works except drawing on the chart and",
+      "  indicator studies.",
       "",
-      "    1. Request access:  https://www.tradingview.com/advanced-charts/",
-      "    2. Once granted:    npm run setup:charts",
+      "    Request access:  https://www.tradingview.com/advanced-charts/",
+      "    Then install:    npm run setup:charts",
       "",
-      "  Full instructions, including the manual route: docs/charting-library.md",
+      "  docs/charting-library.md",
       "",
     ].join("\n"),
   );
-  process.exit(1);
 }

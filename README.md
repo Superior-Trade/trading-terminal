@@ -108,7 +108,7 @@ repair loop.
 
 | | |
 |---|---|
-| **Chart** | TradingView Advanced Charts, Hyperliquid + Lighter datafeeds, order-flow footprint, liquidation heatmap, tier-ranked indicators |
+| **Chart** | TradingView Advanced Charts (or the bundled Lightweight Charts preview), Hyperliquid + Lighter datafeeds, order-flow footprint, liquidation heatmap, tier-ranked indicators |
 | **Agent** | Reads your drawings and a screenshot of the chart; draws back — levels, zones, trendlines, channels, fibs |
 | **Setups** | Scan a chart for plans, or design one in conversation. Entry, stop, target, invalidation, confidence tier |
 | **Strategies** | Freqtrade code generation, deterministic safety validation, automatic repair, historical backtests |
@@ -127,7 +127,6 @@ git clone https://github.com/Superior-Trade/trading-terminal.git
 cd trading-terminal
 npm install
 cp .env.example .env.local     # add the two keys below
-npm run setup:charts           # TradingView — see the note
 npm run dev                    # → http://localhost:3200
 ```
 
@@ -142,13 +141,17 @@ writes to `./.data/` and migrates itself on first boot.
 `.env.example` documents 38 variables. Those two are the only ones without a working
 default.
 
-> [!IMPORTANT]
-> **The chart needs TradingView's approval, and that takes a day or two.**
-> Advanced Charts is free but not redistributable, so we cannot ship it. Apply at
-> [tradingview.com/advanced-charts](https://www.tradingview.com/advanced-charts/); once
-> your GitHub account is granted the repository, `npm run setup:charts` pulls it in.
-> Until then the build stops with instructions. See
-> [docs/charting-library.md](docs/charting-library.md).
+> [!NOTE]
+> **It starts on the preview chart.** TradingView's Advanced Charts is free but not
+> redistributable, so it is not in this repository and a fresh clone runs
+> [Lightweight Charts](https://github.com/tradingview/lightweight-charts) instead —
+> Apache-2.0, bundled, nothing to request.
+>
+> Everything works on it except the two things it has no concept of: **drawing on the
+> chart yourself**, and indicator studies. To get those, request Advanced Charts at
+> [tradingview.com/advanced-charts](https://www.tradingview.com/advanced-charts/) (free,
+> a day or two) and run `npm run setup:charts`. The build tells you which chart it
+> picked. Full comparison: [docs/charting-library.md](docs/charting-library.md).
 
 ## Money
 

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type {
   ChartingLibraryWidgetOptions,
+  EntityId,
   LanguageCode,
   ResolutionString,
   IChartingLibraryWidget,
@@ -825,7 +826,8 @@ export function TradingChart({
                   .getShapeById(sh.id)
                   .getPoints()
                   .filter(
-                    (p) => Number.isFinite(p.time) && Number.isFinite(p.price),
+                    (p: { time: number; price: number }) =>
+        Number.isFinite(p.time) && Number.isFinite(p.price),
                   ) as Array<{ time: number; price: number }>;
               } catch {
                 /* freehand tools expose no points */
@@ -963,7 +965,8 @@ export function TradingChart({
                 .getShapeById(sh.id)
                 .getPoints()
                 .filter(
-                  (p) => Number.isFinite(p.time) && Number.isFinite(p.price),
+                  (p: { time: number; price: number }) =>
+        Number.isFinite(p.time) && Number.isFinite(p.price),
                 ) as Array<{ time: number; price: number }>;
             } catch {
               /* freehand tools may expose no points */
@@ -1039,7 +1042,7 @@ export function TradingChart({
     if (!widgetRef.current || isUnmountingRef.current) return;
     try {
       if (typeof widgetRef.current.save !== "function") return;
-      widgetRef.current.save((state) => {
+      widgetRef.current.save((state: object) => {
         localStorage.setItem(resolvedStorageKey, JSON.stringify(state));
       });
     } catch {
@@ -2646,7 +2649,7 @@ export function TradingChart({
             });
             // Clicks elsewhere inside the iframe close the parent-doc menu
             // (its own outside-click listener can't observe iframe clicks).
-            bdoc.addEventListener("mousedown", (e) => {
+            bdoc.addEventListener("mousedown", (e: MouseEvent) => {
               if (!advBtn.contains(e.target as Node)) setIndicatorMenuOpen(false);
             });
           }
@@ -2855,7 +2858,7 @@ export function TradingChart({
               }, 0);
             };
 
-            stratBtn.addEventListener("click", (e) => {
+            stratBtn.addEventListener("click", (e: MouseEvent) => {
               e.stopPropagation();
               if (sMenu) closeStratMenu();
               else openStratMenu();
@@ -3023,11 +3026,15 @@ export function TradingChart({
         registerChartContextProvider((): ChartContext | null => {
           try {
             const chart = tvWidget.activeChart();
-            const indicators = chart.getAllStudies().map((s) => {
+            const indicators = chart
+      .getAllStudies()
+      .map((s: { id: EntityId; name: string }) => {
               let inputs: Record<string, unknown> | undefined;
               try {
                 const vals = chart.getStudyById(s.id).getInputValues();
-                inputs = Object.fromEntries(vals.map((v) => [v.id, v.value]));
+                inputs = Object.fromEntries(
+            vals.map((v: { id: string; value: unknown }) => [v.id, v.value]),
+          );
               } catch {
                 /* some studies expose no inputs */
               }
@@ -3067,14 +3074,14 @@ export function TradingChart({
             }
             const drawings = chart
               .getAllShapes()
-              .filter((sh) => !liqShapeIdsRef.current.has(String(sh.id)))
-              .map((sh) => {
+              .filter((sh: { id: EntityId }) => !liqShapeIdsRef.current.has(String(sh.id)))
+              .map((sh: { id: EntityId; name: string }) => {
               let points: Array<{ time: number; price: number }> = [];
               try {
                 points = chart
                   .getShapeById(sh.id)
                   .getPoints()
-                  .map((p) => ({ time: p.time, price: p.price }));
+                  .map((p: { time: number; price: number }) => ({ time: p.time, price: p.price }));
               } catch {
                 /* brush and some tools do not expose points */
               }

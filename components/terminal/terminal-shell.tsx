@@ -24,12 +24,24 @@ import { Header } from "./header";
 import { RateLimitBanner } from "./rate-limit-banner";
 import { DeploymentsPanel } from "./deployments-panel";
 import { FloatingChat } from "../chat/floating-chat";
+import { HAS_ADVANCED_CHARTS } from "../../lib/chart-availability";
+import { PreviewChartBanner } from "../chart/preview-chart-banner";
 
-// The charting_library bundle touches browser globals; never SSR it.
+// Both chart bundles touch browser globals; never SSR either.
+//
+// Which one mounts is decided at build time by whether TradingView's Advanced
+// Charts was installed (next.config.ts). The preview is a real fallback rather
+// than a placeholder — see components/chart/preview-chart.tsx for what it gives
+// up — and it exists so a fresh clone runs without waiting on TradingView.
 const TradingChart = dynamic(
   () => import("../chart/trading-chart").then((m) => m.TradingChart),
   { ssr: false },
 );
+const PreviewChart = dynamic(
+  () => import("../chart/preview-chart").then((m) => m.PreviewChart),
+  { ssr: false },
+);
+const Chart = HAS_ADVANCED_CHARTS ? TradingChart : PreviewChart;
 
 const DEFAULT_PAIR = "BTC-USD";
 
@@ -229,7 +241,8 @@ export function TerminalShell({ initialPairSlug }: { initialPairSlug?: string })
             <main className="relative min-w-0 flex-1">
               {/* DetectChip removed by user request — detection lives in the
                   sidebar panel; the chart stays clean when drawing. */}
-              <TradingChart pair={pair} onSymbolChange={setPair} resolution="240" />
+              <Chart pair={pair} onSymbolChange={setPair} resolution="240" />
+              <PreviewChartBanner />
               <ChartSetupBanner />
               <FloatingChat />
             </main>

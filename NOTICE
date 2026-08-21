@@ -21,6 +21,19 @@ components/chart/ is ours and is Apache-2.0 licensed; the library it calls into 
 not.
 
 --------------------------------------------------------------------------------
+TradingView Lightweight Charts
+--------------------------------------------------------------------------------
+
+The preview chart uses TradingView's Lightweight Charts, which IS included (via npm)
+and is licensed under Apache License 2.0:
+
+    https://github.com/tradingview/lightweight-charts
+
+Its licence requires attribution to TradingView as the product creator and a link to
+https://www.tradingview.com on public pages that use it. The chart renders
+TradingView's attribution logo for this reason; do not disable it.
+
+--------------------------------------------------------------------------------
 Third-party dependencies
 --------------------------------------------------------------------------------
 
@@ -36,6 +49,7 @@ each under its own license. Notable ones:
   @privy-io/react-auth            Apache-2.0
   Tailwind CSS                    MIT
   Sentry SDK (@sentry/nextjs)     MIT
+  lightweight-charts              Apache-2.0 (attribution required)
 
 Run `npm ls --all` or inspect node_modules for the complete set and their license
 texts.

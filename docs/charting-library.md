@@ -4,8 +4,34 @@ The chart is TradingView's [Advanced Charts](https://www.tradingview.com/advance
 library. It is free, but TradingView licenses it to **you** and forbids redistribution,
 so it cannot live in this repository. You have to fetch your own copy once.
 
-Everything else in the terminal is here. This is the only missing piece, and the build
-stops with an explanatory error until you install it.
+**You do not need it to run the terminal.** Without it the app mounts a preview chart
+built on [Lightweight Charts](https://github.com/tradingview/lightweight-charts) —
+TradingView's open-source library, Apache-2.0, which ships in this repository. A fresh
+clone builds and runs; the build prints which chart it selected.
+
+## What the preview gives up
+
+The preview renders the market and takes everything the agent draws, so detect, compile,
+backtest and deploy all work end to end. What it cannot do:
+
+| | Advanced Charts | Preview |
+|---|---|---|
+| **Drawing on the chart yourself** | trendlines, zones, brush, fib, text | **none** |
+| Indicator studies | full library, configurable | none |
+| Agent levels, zones, trendlines, channels, fibs | yes | yes |
+| Entry/stop/target and position overlays | yes | yes |
+| Order-flow footprint overlay | yes | no |
+| Saved chart layouts | yes | no |
+| Symbol and timeframe switching | yes | yes |
+| Candles, crosshair, live updates | yes | yes |
+
+The first row is the one that matters. "Draw where you think the market is going" is step
+one of the product, and the preview has no drawing tools — so on a preview build you
+describe your read in words instead, and the agent still answers with a plan drawn onto
+the chart. The loop works; its opening move is narrower.
+
+Actions the preview cannot perform return a truthful error rather than a silent success,
+so the agent never claims to have plotted an indicator that is not there.
 
 ## 1. Get access
 
