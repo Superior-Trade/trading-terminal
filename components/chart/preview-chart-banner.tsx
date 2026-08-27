@@ -8,7 +8,7 @@ const DISMISSED = "cg-preview-chart-dismissed";
 /**
  * Says which chart you are looking at, once, when it is the preview.
  *
- * The preview is honest but noticeably less capable — no drawing tools, no
+ * The preview is honest but noticeably less capable — basic drawing only, no
  * indicator studies — and someone who does not know that will read missing
  * features as bugs. Dismissible and remembered, because a permanent banner over
  * a trading chart is its own kind of bug.
@@ -48,9 +48,9 @@ export function PreviewChartBanner() {
             Preview chart
           </div>
           <p className="mt-1 text-[12.5px] leading-relaxed text-white/75">
-            Running Lightweight Charts. The market, the agent&apos;s levels and every
-            deploy work — but you cannot draw on the chart, and indicator studies are
-            off.{" "}
+            Running Lightweight Charts. The market, the agent&apos;s levels, the toolbar&apos;s
+            trendlines and levels, and every deploy work — but the full drawing
+            toolset and indicator studies are off.{" "}
             <a
               href="https://www.tradingview.com/advanced-charts/"
               target="_blank"

@@ -11,8 +11,10 @@ import {
   type IChartApi,
   type ISeriesApi,
   type IPriceLine,
+  type MouseEventParams,
   type UTCTimestamp,
 } from "lightweight-charts";
+import { TrendLinePrimitive } from "./trend-line-primitive";
 import {
   useChartBridge,
   type ChartAction,
@@ -32,8 +34,13 @@ import { pairToCoin } from "../../lib/hyperliquid-provider";
  * otherwise not start until they had approved you.
  *
  * WHAT THIS CANNOT DO, because Lightweight Charts has no concept of them:
- *   - user drawing. There are no drawing tools, so you cannot sketch your read
- *     onto the chart. This is the biggest loss: it is step one of the product.
+ *   - the full drawing toolset. The toolbar below gives you trendlines and
+ *     horizontal levels (a level is a native price line; a trendline is an
+ *     ISeriesPrimitive, so both are price/time-anchored and survive pan and
+ *     zoom), and everything you draw lands in ChartContext.drawings with
+ *     origin "user" — the same structure the Advanced Charts path reports —
+ *     so the agent reads your sketch either way. Rectangles, fibs, brush and
+ *     the rest still need Advanced Charts.
  *   - indicator studies. No study engine and no indicator UI.
  *   - the order-flow footprint overlay, which is drawn against Advanced
  *     Charts' pane geometry.
@@ -49,16 +56,23 @@ const BG = "#08090a";
 const GRID = "rgba(255,255,255,0.045)";
 const UP = "#a3e635";
 const DOWN = "#ef4444";
+/** User drawings are amber, so yours and the agent's stay tellable apart. */
+const USER = "#fbbf24";
 
 type Candle = { time: UTCTimestamp; open: number; high: number; low: number; close: number };
 
-interface AgentLine {
+type UserTool = "trendline" | "level";
+
+interface Drawing {
   id: string;
   kind: string;
   line?: IPriceLine;
   series?: ISeriesApi<"Line">;
+  primitive?: TrendLinePrimitive;
   label?: string;
   points: Array<{ time: number; price: number }>;
+  /** Who drew it. Absent means the agent; the toolbar sets "user". */
+  origin?: "user" | "agent";
 }
 
 /** Hyperliquid candles, straight from the public info endpoint. */
@@ -99,11 +113,24 @@ export function PreviewChart({
   const holder = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
-  const drawings = useRef<AgentLine[]>([]);
+  const drawings = useRef<Drawing[]>([]);
   const candlesRef = useRef<Candle[]>([]);
   const [tf, setTf] = useState(resolution);
   const [symbol, setSymbol] = useState(pair);
   const [error, setError] = useState<string | null>(null);
+  // ── user drawing state ───────────────────────────────────────────────
+  // The armed tool stays armed after each drawing (matching the Advanced
+  // Charts path's sticky tools) until re-clicked, ESC, or select_tool cursor.
+  const [tool, setTool] = useState<UserTool | null>(null);
+  const toolRef = useRef<UserTool | null>(null);
+  useEffect(() => {
+    toolRef.current = tool;
+  }, [tool]);
+  /** First anchor of an in-progress trendline + its live preview primitive. */
+  const pendingRef = useRef<{
+    start: { time: UTCTimestamp; price: number };
+    primitive: TrendLinePrimitive;
+  } | null>(null);
 
   const {
     registerChartActionHandler,
@@ -211,19 +238,125 @@ export function PreviewChart({
     [],
   );
 
-  const remember = useCallback((d: AgentLine) => {
+  const remember = useCallback((d: Drawing) => {
     drawings.current.push(d);
   }, []);
 
-  const clearDrawings = useCallback(() => {
+  const unrender = useCallback((d: Drawing) => {
     const s = seriesRef.current;
     const chart = chartRef.current;
-    for (const d of drawings.current) {
-      if (d.line && s) s.removePriceLine(d.line);
-      if (d.series && chart) chart.removeSeries(d.series);
-    }
-    drawings.current = [];
+    if (d.line && s) s.removePriceLine(d.line);
+    if (d.series && chart) chart.removeSeries(d.series);
+    if (d.primitive && s) s.detachPrimitive(d.primitive);
   }, []);
+
+  const clearDrawings = useCallback(() => {
+    for (const d of drawings.current) unrender(d);
+    drawings.current = [];
+  }, [unrender]);
+
+  // ── user drawing (the toolbar) ───────────────────────────────────────
+  const cancelPending = useCallback(() => {
+    const p = pendingRef.current;
+    if (p && seriesRef.current) seriesRef.current.detachPrimitive(p.primitive);
+    pendingRef.current = null;
+  }, []);
+
+  const armTool = useCallback(
+    (next: UserTool | null) => {
+      cancelPending();
+      setTool((cur) => (cur === next ? null : next));
+    },
+    [cancelPending],
+  );
+
+  // Click-to-draw. Subscribed once; reads the armed tool through a ref so the
+  // subscription survives re-renders. Points snap to the bar under the cursor
+  // (param.time), which is also what keeps them expressible to the agent.
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    const resolve = (
+      param: MouseEventParams,
+    ): { time: UTCTimestamp; price: number } | null => {
+      const s = seriesRef.current;
+      if (!s || !param.point) return null;
+      const t = param.time ?? chart.timeScale().coordinateToTime(param.point.x);
+      const price = s.coordinateToPrice(param.point.y);
+      if (typeof t !== "number" || price === null) return null;
+      return { time: t as UTCTimestamp, price: Number(price) };
+    };
+    const onClick = (param: MouseEventParams) => {
+      const mode = toolRef.current;
+      if (!mode) return;
+      const pt = resolve(param);
+      if (!pt) return;
+      const id = `user-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      if (mode === "level") {
+        const l = priceLine(pt.price, USER, "");
+        if (l)
+          remember({
+            id,
+            kind: "horizontal_line",
+            line: l,
+            points: [{ time: Number(pt.time), price: pt.price }],
+            origin: "user",
+          });
+        return;
+      }
+      const pending = pendingRef.current;
+      if (!pending) {
+        // First anchor: attach a preview primitive that follows the cursor.
+        const s = seriesRef.current;
+        if (!s) return;
+        const primitive = new TrendLinePrimitive(pt, pt, USER);
+        s.attachPrimitive(primitive);
+        pendingRef.current = { start: pt, primitive };
+        return;
+      }
+      pending.primitive.setPoints(pending.start, pt);
+      remember({
+        id,
+        kind: "trend_line",
+        primitive: pending.primitive,
+        points: [
+          { time: Number(pending.start.time), price: pending.start.price },
+          { time: Number(pt.time), price: pt.price },
+        ],
+        origin: "user",
+      });
+      pendingRef.current = null;
+    };
+    const onMove = (param: MouseEventParams) => {
+      const pending = pendingRef.current;
+      if (!pending) return;
+      const pt = resolve(param);
+      if (pt) pending.primitive.setPoints(pending.start, pt);
+    };
+    chart.subscribeClick(onClick);
+    chart.subscribeCrosshairMove(onMove);
+    return () => {
+      try {
+        chart.unsubscribeClick(onClick);
+        chart.unsubscribeCrosshairMove(onMove);
+      } catch {
+        /* chart already disposed by the mount effect's cleanup */
+      }
+    };
+  }, [priceLine, remember]);
+
+  // ESC drops the armed tool (and any half-placed trendline).
+  useEffect(() => {
+    if (!tool) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        cancelPending();
+        setTool(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [tool, cancelPending]);
 
   // ── the agent's actions ──────────────────────────────────────────────
   useEffect(() => {
@@ -320,6 +453,36 @@ export function PreviewChart({
           case "clear_all_drawings":
             clearDrawings();
             return { ok: true };
+          case "remove_entities": {
+            // Grouped drawings (zones, fibs, setups) store companions under
+            // `${id}-suffix`; removing the id the agent saw removes the group.
+            const doomed = drawings.current.filter((d) =>
+              action.ids.some((x) => d.id === x || d.id.startsWith(`${x}-`)),
+            );
+            for (const d of doomed) unrender(d);
+            drawings.current = drawings.current.filter((d) => !doomed.includes(d));
+            return { ok: true };
+          }
+
+          // The chat bar's pencil arms tools through select_tool with
+          // TradingView tool names; map the two the preview can honour.
+          case "select_tool":
+            if (action.tool === "cursor") {
+              cancelPending();
+              setTool(null);
+              return { ok: true };
+            }
+            if (action.tool === "trend_line") {
+              cancelPending();
+              setTool("trendline");
+              return { ok: true };
+            }
+            if (action.tool === "horizontal_line") {
+              cancelPending();
+              setTool("level");
+              return { ok: true };
+            }
+            return unsupported(`the ${action.tool} tool`);
 
           // Honest refusals. Returning ok:true here would let the agent claim
           // it had plotted an indicator that is not on screen.
@@ -327,8 +490,6 @@ export function PreviewChart({
           case "remove_indicators":
           case "clear_indicators":
             return unsupported("indicator studies");
-          case "select_tool":
-            return unsupported("drawing tools");
           case "draw_vertical":
           case "draw_text":
             return unsupported(action.action.replace("draw_", "the ") + " tool");
@@ -341,7 +502,15 @@ export function PreviewChart({
     };
     registerChartActionHandler(handle);
     return () => registerChartActionHandler(null);
-  }, [registerChartActionHandler, priceLine, segment, remember, clearDrawings]);
+  }, [
+    registerChartActionHandler,
+    priceLine,
+    segment,
+    remember,
+    clearDrawings,
+    unrender,
+    cancelPending,
+  ]);
 
   // ── what the agent can read ──────────────────────────────────────────
   useEffect(() => {
@@ -357,7 +526,16 @@ export function PreviewChart({
         indicators: [],
         drawings: drawings.current
           .filter((d) => d.points.length > 0)
-          .map((d) => ({ id: d.id, kind: d.kind, points: d.points, origin: "agent" as const, label: d.label })),
+          .map((d) => ({
+            id: d.id,
+            kind: d.kind,
+            points: d.points,
+            // Same structure the Advanced Charts provider reports, so the
+            // agent reads a hand-drawn preview trendline exactly like a
+            // TradingView one.
+            origin: d.origin ?? ("agent" as const),
+            label: d.label,
+          })),
         lastPrice: candles.length ? candles[candles.length - 1].close : null,
         recentCandles: candles.slice(-120).map((c) => ({
           t: Number(c.time), o: c.open, h: c.high, l: c.low, c: c.close,
@@ -385,9 +563,44 @@ export function PreviewChart({
 
   useEffect(() => setSymbol(pair), [pair]);
 
+  const toolButton = (t: UserTool, label: string, hint: string) => (
+    <button
+      onClick={() => armTool(t)}
+      title={hint}
+      className={`rounded-md px-2 py-1 font-mono text-[11px] transition-colors ${
+        tool === t
+          ? "bg-amber-500/15 text-amber-300"
+          : "text-white/60 hover:bg-white/10 hover:text-white"
+      }`}
+    >
+      {label}
+    </button>
+  );
+
   return (
     <div className="relative h-full w-full">
-      <div ref={holder} className="h-full w-full" />
+      <div
+        ref={holder}
+        className="h-full w-full"
+        style={tool ? { cursor: "crosshair" } : undefined}
+      />
+      <div className="absolute left-3 top-3 z-20 flex items-center gap-1 rounded-lg border border-white/10 bg-black/60 p-1 backdrop-blur">
+        {toolButton("trendline", "Trendline", "Draw a trendline: click two points")}
+        {toolButton("level", "Level", "Draw a horizontal level: click a price")}
+        <div className="h-4 w-px bg-white/10" />
+        <button
+          onClick={clearDrawings}
+          title="Remove every drawing"
+          className="rounded-md px-2 py-1 font-mono text-[11px] text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+        >
+          Clear
+        </button>
+        {tool && (
+          <span className="px-1.5 font-mono text-[10px] text-white/35">
+            {tool === "trendline" ? "click two points" : "click a price"} · esc
+          </span>
+        )}
+      </div>
       {error && (
         <div className="pointer-events-none absolute inset-x-0 top-3 mx-auto w-fit rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-1.5 font-mono text-[11px] text-red-300">
           {error}
