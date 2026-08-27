@@ -5,7 +5,11 @@ import type {
   SeriesAttachedParameter,
   Time,
 } from "lightweight-charts";
-import type { TrendPoint } from "./trend-line-primitive";
+import {
+  drawSelectionHandle,
+  strokeSelectionGlow,
+  type TrendPoint,
+} from "./trend-line-primitive";
 
 /**
  * A rectangle anchored by two opposite corners in price/time, so it stays on
@@ -27,6 +31,7 @@ class RectanglePaneRenderer implements IPrimitivePaneRenderer {
     private readonly _p2: Pixel | null,
     private readonly _color: string,
     private readonly _fillColor: string,
+    private readonly _selected: boolean,
   ) {}
 
   draw(target: RenderTarget): void {
@@ -45,9 +50,18 @@ class RectanglePaneRenderer implements IPrimitivePaneRenderer {
       const h = Math.abs(y2 - y1);
       ctx.fillStyle = this._fillColor;
       ctx.fillRect(x, y, w, h);
+      if (this._selected)
+        strokeSelectionGlow(scope, this._color, (c) => c.rect(x, y, w, h));
       ctx.strokeStyle = this._color;
-      ctx.lineWidth = Math.max(1, Math.round(scope.verticalPixelRatio));
+      ctx.lineWidth = Math.max(
+        1,
+        Math.round((this._selected ? 2 : 1) * scope.verticalPixelRatio),
+      );
       ctx.strokeRect(x, y, w, h);
+      if (this._selected) {
+        drawSelectionHandle(scope, x1, y1, this._color);
+        drawSelectionHandle(scope, x2, y2, this._color);
+      }
     });
   }
 }
@@ -81,12 +95,14 @@ class RectanglePaneView implements IPrimitivePaneView {
       this._p2,
       this._source.color,
       this._source.fillColor,
+      this._source.selected,
     );
   }
 }
 
 export class RectanglePrimitive implements ISeriesPrimitive<Time> {
   attachedTo: SeriesAttachedParameter<Time> | null = null;
+  selected = false;
   private readonly _paneView = new RectanglePaneView(this);
 
   constructor(
@@ -95,6 +111,11 @@ export class RectanglePrimitive implements ISeriesPrimitive<Time> {
     public readonly color: string,
     public readonly fillColor: string,
   ) {}
+
+  setSelected(selected: boolean): void {
+    this.selected = selected;
+    this.attachedTo?.requestUpdate();
+  }
 
   attached(param: SeriesAttachedParameter<Time>): void {
     this.attachedTo = param;

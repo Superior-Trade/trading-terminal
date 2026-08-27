@@ -5,7 +5,11 @@ import type {
   SeriesAttachedParameter,
   Time,
 } from "lightweight-charts";
-import type { TrendPoint } from "./trend-line-primitive";
+import {
+  drawSelectionHandle,
+  strokeSelectionGlow,
+  type TrendPoint,
+} from "./trend-line-primitive";
 
 /**
  * A Fibonacci retracement: two anchors bound a leg, and horizontal levels are
@@ -21,6 +25,7 @@ import type { TrendPoint } from "./trend-line-primitive";
 export const FIB_RATIOS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1] as const;
 
 type Level = { y: number; ratio: number };
+type Pixel = { x: number; y: number };
 type RenderTarget = Parameters<IPrimitivePaneRenderer["draw"]>[0];
 
 class FibRetracementPaneRenderer implements IPrimitivePaneRenderer {
@@ -29,6 +34,8 @@ class FibRetracementPaneRenderer implements IPrimitivePaneRenderer {
     private readonly _x2: number | null,
     private readonly _levels: Level[],
     private readonly _color: string,
+    private readonly _anchors: [Pixel, Pixel] | null,
+    private readonly _selected: boolean,
   ) {}
 
   draw(target: RenderTarget): void {
@@ -41,10 +48,18 @@ class FibRetracementPaneRenderer implements IPrimitivePaneRenderer {
       const xb = Math.round(Math.max(x1m, x2m) * scope.horizontalPixelRatio);
       ctx.strokeStyle = this._color;
       ctx.fillStyle = this._color;
-      ctx.lineWidth = Math.max(1, Math.round(scope.verticalPixelRatio));
+      ctx.lineWidth = Math.max(
+        1,
+        Math.round((this._selected ? 2 : 1) * scope.verticalPixelRatio),
+      );
       ctx.font = `${Math.round(10 * scope.verticalPixelRatio)}px monospace`;
       for (const lvl of this._levels) {
         const y = Math.round(lvl.y * scope.verticalPixelRatio);
+        if (this._selected)
+          strokeSelectionGlow(scope, this._color, (c) => {
+            c.moveTo(xa, y);
+            c.lineTo(xb, y);
+          });
         ctx.beginPath();
         ctx.moveTo(xa, y);
         ctx.lineTo(xb, y);
@@ -55,6 +70,15 @@ class FibRetracementPaneRenderer implements IPrimitivePaneRenderer {
           y - Math.round(3 * scope.verticalPixelRatio),
         );
       }
+      if (this._selected && this._anchors) {
+        for (const a of this._anchors)
+          drawSelectionHandle(
+            scope,
+            Math.round(a.x * scope.horizontalPixelRatio),
+            Math.round(a.y * scope.verticalPixelRatio),
+            this._color,
+          );
+      }
     });
   }
 }
@@ -63,6 +87,7 @@ class FibRetracementPaneView implements IPrimitivePaneView {
   private _x1: number | null = null;
   private _x2: number | null = null;
   private _levels: Level[] = [];
+  private _anchors: [Pixel, Pixel] | null = null;
 
   constructor(private readonly _source: FibRetracementPrimitive) {}
 
@@ -70,6 +95,7 @@ class FibRetracementPaneView implements IPrimitivePaneView {
     this._x1 = null;
     this._x2 = null;
     this._levels = [];
+    this._anchors = null;
     const attached = this._source.attachedTo;
     if (!attached) return;
     const timeScale = attached.chart.timeScale();
@@ -86,6 +112,13 @@ class FibRetracementPaneView implements IPrimitivePaneView {
       const y = attached.series.priceToCoordinate(price);
       if (y !== null) this._levels.push({ y: Number(y), ratio });
     }
+    const y1 = attached.series.priceToCoordinate(p1.price);
+    const y2 = attached.series.priceToCoordinate(p2.price);
+    if (y1 !== null && y2 !== null)
+      this._anchors = [
+        { x: Number(x1), y: Number(y1) },
+        { x: Number(x2), y: Number(y2) },
+      ];
   }
 
   renderer(): IPrimitivePaneRenderer | null {
@@ -94,12 +127,15 @@ class FibRetracementPaneView implements IPrimitivePaneView {
       this._x2,
       this._levels,
       this._source.color,
+      this._anchors,
+      this._source.selected,
     );
   }
 }
 
 export class FibRetracementPrimitive implements ISeriesPrimitive<Time> {
   attachedTo: SeriesAttachedParameter<Time> | null = null;
+  selected = false;
   private readonly _paneView = new FibRetracementPaneView(this);
 
   constructor(
@@ -108,6 +144,11 @@ export class FibRetracementPrimitive implements ISeriesPrimitive<Time> {
     public readonly color: string,
     public readonly ratios: readonly number[] = FIB_RATIOS,
   ) {}
+
+  setSelected(selected: boolean): void {
+    this.selected = selected;
+    this.attachedTo?.requestUpdate();
+  }
 
   attached(param: SeriesAttachedParameter<Time>): void {
     this.attachedTo = param;

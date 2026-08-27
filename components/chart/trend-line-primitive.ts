@@ -27,6 +27,51 @@ export interface TrendPoint {
 type Pixel = { x: number; y: number };
 type RenderTarget = Parameters<IPrimitivePaneRenderer["draw"]>[0];
 
+/** Bitmap-space scope handed to renderers inside useBitmapCoordinateSpace. */
+export interface BitmapScope {
+  context: CanvasRenderingContext2D;
+  horizontalPixelRatio: number;
+  verticalPixelRatio: number;
+}
+
+/**
+ * Anchor handle for a selected drawing: a filled dot with a dark rim, drawn in
+ * bitmap space. Shared by every preview primitive so selection reads the same
+ * on all of them.
+ */
+export function drawSelectionHandle(scope: BitmapScope, x: number, y: number, color: string): void {
+  const ctx = scope.context;
+  const r = Math.max(3, Math.round(4 * scope.verticalPixelRatio));
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.lineWidth = Math.max(1, Math.round(scope.verticalPixelRatio));
+  ctx.strokeStyle = "#0b0d0e";
+  ctx.stroke();
+}
+
+/**
+ * "Brighter" for a selected drawing: a wide translucent under-stroke in the
+ * drawing's own color, laid down before the normal stroke re-draws on top.
+ */
+export function strokeSelectionGlow(
+  scope: BitmapScope,
+  color: string,
+  path: (ctx: CanvasRenderingContext2D) => void,
+): void {
+  const ctx = scope.context;
+  ctx.save();
+  ctx.globalAlpha = 0.3;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = Math.max(5, Math.round(7 * scope.verticalPixelRatio));
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  path(ctx);
+  ctx.stroke();
+  ctx.restore();
+}
+
 /** Pushes (x2,y2) along the p1→p2 direction until it hits a pane edge. */
 function extendToEdge(
   x1: number,
@@ -50,6 +95,7 @@ class TrendLinePaneRenderer implements IPrimitivePaneRenderer {
     private readonly _p2: Pixel | null,
     private readonly _color: string,
     private readonly _ray: boolean,
+    private readonly _selected: boolean,
   ) {}
 
   draw(target: RenderTarget): void {
@@ -60,8 +106,10 @@ class TrendLinePaneRenderer implements IPrimitivePaneRenderer {
       const ctx = scope.context;
       const x1 = Math.round(p1.x * scope.horizontalPixelRatio);
       const y1 = Math.round(p1.y * scope.verticalPixelRatio);
-      let x2 = Math.round(p2.x * scope.horizontalPixelRatio);
-      let y2 = Math.round(p2.y * scope.verticalPixelRatio);
+      const ax2 = Math.round(p2.x * scope.horizontalPixelRatio);
+      const ay2 = Math.round(p2.y * scope.verticalPixelRatio);
+      let x2 = ax2;
+      let y2 = ay2;
       if (this._ray && (x1 !== x2 || y1 !== y2)) {
         const end = extendToEdge(
           x1, y1, x2, y2,
@@ -71,13 +119,27 @@ class TrendLinePaneRenderer implements IPrimitivePaneRenderer {
         x2 = end.x;
         y2 = end.y;
       }
+      if (this._selected)
+        strokeSelectionGlow(scope, this._color, (c) => {
+          c.moveTo(x1, y1);
+          c.lineTo(x2, y2);
+        });
       ctx.beginPath();
       ctx.strokeStyle = this._color;
-      ctx.lineWidth = Math.max(1, Math.round(2 * scope.verticalPixelRatio));
+      ctx.lineWidth = Math.max(
+        1,
+        Math.round((this._selected ? 3 : 2) * scope.verticalPixelRatio),
+      );
       ctx.lineCap = "round";
       ctx.moveTo(x1, y1);
       ctx.lineTo(x2, y2);
       ctx.stroke();
+      if (this._selected) {
+        // Handles sit on the ANCHORS — for a ray that is the placed second
+        // point, not the pane edge the line runs on to.
+        drawSelectionHandle(scope, x1, y1, this._color);
+        drawSelectionHandle(scope, ax2, ay2, this._color);
+      }
     });
   }
 }
@@ -114,12 +176,14 @@ class TrendLinePaneView implements IPrimitivePaneView {
       this._p2,
       this._source.color,
       this._source.ray,
+      this._source.selected,
     );
   }
 }
 
 export class TrendLinePrimitive implements ISeriesPrimitive<Time> {
   attachedTo: SeriesAttachedParameter<Time> | null = null;
+  selected = false;
   private readonly _paneView = new TrendLinePaneView(this);
 
   constructor(
@@ -128,6 +192,11 @@ export class TrendLinePrimitive implements ISeriesPrimitive<Time> {
     public readonly color: string,
     public readonly ray = false,
   ) {}
+
+  setSelected(selected: boolean): void {
+    this.selected = selected;
+    this.attachedTo?.requestUpdate();
+  }
 
   attached(param: SeriesAttachedParameter<Time>): void {
     this.attachedTo = param;

@@ -11,13 +11,15 @@ import {
   type IChartApi,
   type ISeriesApi,
   type IPriceLine,
+  type LineWidth,
   type MouseEventParams,
   type UTCTimestamp,
 } from "lightweight-charts";
 import { TrendLinePrimitive } from "./trend-line-primitive";
 import { RectanglePrimitive } from "./rectangle-primitive";
 import { VerticalLinePrimitive } from "./vertical-line-primitive";
-import { FibRetracementPrimitive } from "./fib-retracement-primitive";
+import { FibRetracementPrimitive, FIB_RATIOS } from "./fib-retracement-primitive";
+import { pickNearest, type HitGeometry } from "./drawing-hit-test";
 import {
   useChartBridge,
   type ChartAction,
@@ -247,6 +249,12 @@ export function PreviewChart({
     start: { time: UTCTimestamp; price: number };
     primitive: TwoPointPrimitive;
   } | null>(null);
+  // ── selection state ──────────────────────────────────────────────────
+  // Clicking near a drawing (no tool armed) selects it; x/y anchor the
+  // floating × button in pane pixels. The ref mirrors the id for handlers
+  // that live outside React's render cycle.
+  const [selected, setSelected] = useState<{ id: string; x: number; y: number } | null>(null);
+  const selectedIdRef = useRef<string | null>(null);
 
   const {
     registerChartActionHandler,
@@ -369,6 +377,138 @@ export function PreviewChart({
   const clearDrawings = useCallback(() => {
     for (const d of drawings.current) unrender(d);
     drawings.current = [];
+    selectedIdRef.current = null;
+    setSelected(null);
+  }, [unrender]);
+
+  // ── selection ────────────────────────────────────────────────────────
+  /** The drawing's current pane-pixel geometry, or null when unresolvable
+   *  (chart gone, anchors off the loaded range, or no stored points). */
+  const geometryFor = useCallback((d: Drawing): HitGeometry | null => {
+    const chart = chartRef.current;
+    const s = seriesRef.current;
+    if (!chart || !s || d.points.length === 0) return null;
+    const ts = chart.timeScale();
+    const toPx = (p: { time: number; price: number }) => {
+      const x = ts.timeToCoordinate(p.time as UTCTimestamp);
+      const y = s.priceToCoordinate(p.price);
+      return x === null || y === null ? null : { x: Number(x), y: Number(y) };
+    };
+    // Price-line-backed drawings (levels, zone boundaries) are horizontal
+    // lines at their stored prices, at any x.
+    if (d.line) {
+      const ys = d.points
+        .map((p) => s.priceToCoordinate(p.price))
+        .filter((y): y is NonNullable<typeof y> => y !== null)
+        .map(Number);
+      if (ys.length === 0) return null;
+      if (ys.length === 1) return { kind: "hline", y: ys[0] };
+      return { kind: "fib", xa: 0, xb: chart.paneSize().width, ys };
+    }
+    if (d.kind === "vertical_line") {
+      const x = ts.timeToCoordinate(d.points[0].time as UTCTimestamp);
+      return x === null ? null : { kind: "vline", x: Number(x) };
+    }
+    if (d.points.length < 2) return null;
+    const a = toPx(d.points[0]);
+    const b = toPx(d.points[1]);
+    if (!a || !b) return null;
+    switch (d.kind) {
+      case "ray":
+        return { kind: "ray", x1: a.x, y1: a.y, x2: b.x, y2: b.y };
+      case "rectangle":
+        return { kind: "rect", x1: a.x, y1: a.y, x2: b.x, y2: b.y };
+      case "fib_retracement": {
+        // Levels sit where the primitive draws them: p2 is ratio 0, p1 ratio 1.
+        const [p1, p2] = d.points;
+        const ys = FIB_RATIOS.map((r) =>
+          s.priceToCoordinate(p2.price + (p1.price - p2.price) * r),
+        )
+          .filter((y): y is NonNullable<typeof y> => y !== null)
+          .map(Number);
+        return ys.length ? { kind: "fib", xa: a.x, xb: b.x, ys } : null;
+      }
+      default:
+        // trend_line — the user's primitive or the agent's two-point series.
+        return { kind: "segment", x1: a.x, y1: a.y, x2: b.x, y2: b.y };
+    }
+  }, []);
+
+  /** Nearest drawing within tolerance of a pane-pixel point. */
+  const hitAt = useCallback(
+    (x: number, y: number): Drawing | null => {
+      const list = drawings.current;
+      const idx = pickNearest(list.map(geometryFor), x, y);
+      return idx === null ? null : list[idx];
+    },
+    [geometryFor],
+  );
+
+  /** Where the floating × belongs for a drawing, in pane pixels. */
+  const badgePosFor = useCallback(
+    (d: Drawing): { x: number; y: number } | null => {
+      const chart = chartRef.current;
+      if (!chart) return null;
+      const pane = chart.paneSize();
+      const geom = geometryFor(d);
+      if (!geom) return null;
+      const clamp = (p: { x: number; y: number }) => ({
+        x: Math.min(Math.max(p.x, 16), pane.width - 16),
+        y: Math.min(Math.max(p.y, 16), pane.height - 16),
+      });
+      switch (geom.kind) {
+        case "hline":
+          return clamp({ x: pane.width - 72, y: geom.y });
+        case "vline":
+          return clamp({ x: geom.x, y: 28 });
+        case "fib":
+          return clamp({
+            x: (geom.xa + geom.xb) / 2,
+            y: (Math.min(...geom.ys) + Math.max(...geom.ys)) / 2,
+          });
+        default:
+          return clamp({ x: (geom.x1 + geom.x2) / 2, y: (geom.y1 + geom.y2) / 2 });
+      }
+    },
+    [geometryFor],
+  );
+
+  /** Applies selected styling across every render backing and sets state.
+   *  Grouped drawings (`${id}-suffix` companions) light up with their head. */
+  const selectDrawing = useCallback(
+    (d: Drawing | null, at?: { x: number; y: number }) => {
+      for (const dr of drawings.current) {
+        const on = d !== null && (dr.id === d.id || dr.id.startsWith(`${d.id}-`));
+        dr.primitive?.setSelected(on);
+        const lineW: LineWidth = on ? 3 : 1;
+        if (dr.line) dr.line.applyOptions({ lineWidth: lineW });
+        const seriesW: LineWidth = on ? 4 : 2;
+        if (dr.series) dr.series.applyOptions({ lineWidth: seriesW });
+      }
+      if (!d) {
+        selectedIdRef.current = null;
+        setSelected(null);
+        return;
+      }
+      selectedIdRef.current = d.id;
+      const pos = at ?? badgePosFor(d) ?? { x: 24, y: 24 };
+      setSelected({ id: d.id, x: pos.x, y: pos.y });
+    },
+    [badgePosFor],
+  );
+
+  /** Removes the selected drawing (and its grouped companions). The context
+   *  provider reads drawings.current live, so the chat tags follow. */
+  const deleteSelected = useCallback(() => {
+    const id = selectedIdRef.current;
+    if (!id) return;
+    const doomed = drawings.current.filter(
+      (d) => d.id === id || d.id.startsWith(`${id}-`),
+    );
+    for (const d of doomed) unrender(d);
+    drawings.current = drawings.current.filter((d) => !doomed.includes(d));
+    selectedIdRef.current = null;
+    setSelected(null);
   }, [unrender]);
 
   // ── user drawing (the toolbar) ───────────────────────────────────────
@@ -381,9 +521,11 @@ export function PreviewChart({
   const armTool = useCallback(
     (next: UserTool | null) => {
       cancelPending();
+      // Arming a tool commits to drawing; drop any selection first.
+      if (next) selectDrawing(null);
       setTool((cur) => (cur === next ? null : next));
     },
-    [cancelPending],
+    [cancelPending, selectDrawing],
   );
 
   // Click-to-draw. Subscribed once; reads the armed tool through a ref so the
@@ -429,10 +571,20 @@ export function PreviewChart({
     };
     const onClick = (e: MouseEvent) => {
       const mode = toolRef.current;
-      if (!mode) return;
       if (down && Math.abs(e.clientX - down.x) + Math.abs(e.clientY - down.y) >= 5)
-        return; // that was a pan, not a placement
+        return; // that was a pan, not a placement (or a selection)
       const rect = el.getBoundingClientRect();
+      if (!mode) {
+        // No tool armed: the click selects the nearest drawing, or clears
+        // the selection when it lands on empty chart.
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const pane = chart.paneSize();
+        if (x < 0 || y < 0 || x > pane.width || y > pane.height) return; // axes
+        const hit = hitAt(x, y);
+        selectDrawing(hit, hit ? (badgePosFor(hit) ?? { x, y }) : undefined);
+        return;
+      }
       const pt = resolveXY(e.clientX - rect.left, e.clientY - rect.top);
       if (!pt) return;
       const s = seriesRef.current;
@@ -501,19 +653,40 @@ export function PreviewChart({
       const pt = resolve(param);
       if (pt) pending.primitive.setPoints(pending.start, pt);
     };
+    // Hovering a drawing with no tool armed shows a pointer, so the chart
+    // tells you what is clickable before you click it.
+    const onHover = (e: MouseEvent) => {
+      if (toolRef.current) return; // React styles the armed crosshair
+      const rect = el.getBoundingClientRect();
+      const hit = hitAt(e.clientX - rect.left, e.clientY - rect.top);
+      el.style.cursor = hit ? "pointer" : "";
+    };
+    // Pan/zoom moves the selected drawing; keep the × riding on it.
+    const reposition = () => {
+      const id = selectedIdRef.current;
+      if (!id) return;
+      const d = drawings.current.find((x) => x.id === id);
+      const pos = d ? badgePosFor(d) : null;
+      if (pos)
+        setSelected((prev) => (prev && prev.id === id ? { ...prev, ...pos } : prev));
+    };
+    chart.timeScale().subscribeVisibleLogicalRangeChange(reposition);
     el.addEventListener("mousedown", onDown);
     el.addEventListener("click", onClick);
+    el.addEventListener("mousemove", onHover);
     chart.subscribeCrosshairMove(onMove);
     return () => {
       el.removeEventListener("mousedown", onDown);
       el.removeEventListener("click", onClick);
+      el.removeEventListener("mousemove", onHover);
       try {
+        chart.timeScale().unsubscribeVisibleLogicalRangeChange(reposition);
         chart.unsubscribeCrosshairMove(onMove);
       } catch {
         /* chart already disposed by the mount effect's cleanup */
       }
     };
-  }, [priceLine, remember]);
+  }, [priceLine, remember, hitAt, selectDrawing, badgePosFor]);
 
   // ESC drops the armed tool (and any half-placed two-point shape).
   useEffect(() => {
@@ -527,6 +700,28 @@ export function PreviewChart({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [tool, cancelPending]);
+
+  // Delete/Backspace removes the selected drawing; ESC deselects. Keys typed
+  // into the chat input (or any other field) never reach the chart.
+  useEffect(() => {
+    if (!selected) return;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (
+        t &&
+        (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)
+      )
+        return;
+      if (e.key === "Delete" || e.key === "Backspace") {
+        e.preventDefault();
+        deleteSelected();
+      } else if (e.key === "Escape") {
+        selectDrawing(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selected, deleteSelected, selectDrawing]);
 
   // ── the agent's actions ──────────────────────────────────────────────
   useEffect(() => {
@@ -631,6 +826,10 @@ export function PreviewChart({
             );
             for (const d of doomed) unrender(d);
             drawings.current = drawings.current.filter((d) => !doomed.includes(d));
+            if (doomed.some((d) => d.id === selectedIdRef.current)) {
+              selectedIdRef.current = null;
+              setSelected(null);
+            }
             return { ok: true };
           }
 
@@ -667,6 +866,7 @@ export function PreviewChart({
             }
             const mapped = TOOL_FOR_NAME[action.tool];
             if (mapped) {
+              selectDrawing(null); // committing to drawing drops the selection
               setTool(mapped);
               return { ok: true };
             }
@@ -698,6 +898,7 @@ export function PreviewChart({
     clearDrawings,
     unrender,
     cancelPending,
+    selectDrawing,
   ]);
 
   // ── what the agent can read ──────────────────────────────────────────
@@ -758,6 +959,17 @@ export function PreviewChart({
         className="h-full w-full"
         style={tool ? { cursor: "crosshair" } : undefined}
       />
+      {selected && (
+        <button
+          onClick={deleteSelected}
+          title="Delete drawing (Del)"
+          aria-label="Delete drawing"
+          className="absolute z-20 grid h-5 w-5 -translate-y-1/2 translate-x-2 place-items-center rounded-full border border-white/20 bg-black/80 font-mono text-[11px] leading-none text-white/80 backdrop-blur transition-colors hover:border-red-400/60 hover:bg-red-500/20 hover:text-red-300"
+          style={{ left: selected.x, top: selected.y }}
+        >
+          ×
+        </button>
+      )}
       <div className="absolute left-3 top-3 z-20 flex items-center gap-0.5 rounded-lg border border-white/10 bg-black/60 p-1 backdrop-blur">
         {TOOLBAR.map(({ tool: t, name, Icon }, i) => (
           <span key={t} className="flex items-center gap-0.5">
