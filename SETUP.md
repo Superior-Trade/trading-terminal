@@ -20,6 +20,8 @@ node --version    # need >= 20.9
 git --version     # any recent
 ```
 
+Commands in this document are bash; on Windows they work as written in Git Bash.
+
 If Node is missing or too old, stop and tell your human. Do not install Node yourself
 unless they ask you to.
 
@@ -43,14 +45,17 @@ Two keys, nothing else:
 | `OPENROUTER_API_KEY` | [openrouter.ai/keys](https://openrouter.ai/keys) | The agent panel cannot think |
 
 You cannot create these accounts yourself — **ask your human for both keys.** While you
-wait, continue to Step 3; the app boots without them and tells you what is missing.
+wait, continue to Step 3; the app boots without them, and
+`curl -s http://localhost:3200/api/keys` states exactly what is missing.
 
 ```bash
 cp .env.example .env.local
 # put the two keys in .env.local when you have them
 ```
 
-While setting up, add these two lines to `.env.local` as well:
+While setting up, edit these two values **in place** in `.env.local` (both lines
+already exist — `NEXT_PUBLIC_HL_NETWORK` ships as `mainnet`; change it, do not append
+a duplicate line):
 
 ```
 NEXT_PUBLIC_HL_NETWORK=testnet
@@ -60,8 +65,8 @@ FREEZE_ALL=1
 `testnet` keeps every order off mainnet. `FREEZE_ALL=1` makes every money-moving route
 return 503 — remove it only when your human says the setup is done and reviewed.
 
-**Check:** `.env.local` exists and is listed in `.gitignore` (it already is — verify,
-never commit it).
+**Check:** `.env.local` exists and `git check-ignore .env.local` prints the filename
+(the `.env*` pattern covers it — never commit it).
 
 ## Step 3 — run
 
@@ -74,7 +79,9 @@ npm run dev
 should return 200). First boot also creates `./.data/` — an embedded Postgres that
 migrates itself; no database of your own to provision.
 
-If port 3200 is taken: `npx next dev -p 3201` and adjust the checks.
+If port 3200 is taken: `npx next dev --webpack -p 3201` and adjust the checks.
+The `--webpack` flag is required — without it Next uses Turbopack, which misses the
+charting-library stub and every page returns 500.
 
 You will see the **preview chart** (Lightweight Charts), not TradingView — that is
 expected on a fresh clone. Drawing on the chart and indicator studies need TradingView
@@ -84,8 +91,9 @@ Advanced Charts, which a human must request (free) at
 
 ## Step 4 — verify what state you are in
 
-With **no keys**: the app serves, the chart renders, and key-dependent panels say so.
-That is a correct no-key state, not a failure.
+With **no keys**: the app serves, the chart renders, `/api/keys` names the missing
+keys, and `npm test` plus `npm run check-types` already pass — run both. That is a
+correct no-key state, not a failure.
 
 With **both keys** in `.env.local` (restart `npm run dev` after adding them):
 
