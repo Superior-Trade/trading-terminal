@@ -79,9 +79,16 @@ npm run dev
 should return 200). First boot also creates `./.data/` — an embedded Postgres that
 migrates itself; no database of your own to provision.
 
-If port 3200 is taken: `npx next dev --webpack -p 3201` and adjust the checks.
-The `--webpack` flag is required — without it Next uses Turbopack, which misses the
-charting-library stub and every page returns 500.
+If port 3200 is taken:
+
+```bash
+node scripts/check-charting-library.mjs && npx next dev --webpack -p 3201
+```
+
+`--webpack` is required — without it Next uses Turbopack, misses the charting-library
+stub, and every page returns 500. The first command is the check `npm run dev` would
+have run for you. On an alternate port, e2e needs to know too:
+`E2E_BASE=http://localhost:3201 npm run test:e2e`.
 
 You will see the **preview chart** (Lightweight Charts), not TradingView — that is
 expected on a fresh clone. Drawing on the chart and indicator studies need TradingView
@@ -104,8 +111,17 @@ npm run test:e2e      # needs the dev server running; drives the real app.
                       # It never deploys and never withdraws by design.
 ```
 
-**Check:** unit tests green. e2e green with keys present. With `FREEZE_ALL=1` any
-money-route test is expected to see 503 — that is the freeze working.
+**Check:** unit tests and types green. e2e will NOT be fully green in the setup state,
+and that is correct — expect exactly these failures and no others:
+
+| Expected e2e failure | Why |
+|---|---|
+| `chart library is installed` | Fresh clone runs the preview chart; TradingView needs a human request |
+| The two withdrawal-validation tests | `FREEZE_ALL=1` answers 503 before validation can answer 400 — the freeze working |
+
+Everything else — the agent tests included (a real chat turn, a strategy compiled,
+unsafe code caught and repaired) — should pass. Any *other* failure is a real problem;
+report it.
 
 ## Step 5 — report
 
