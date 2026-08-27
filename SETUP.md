@@ -45,8 +45,8 @@ Two keys, nothing else:
 | `OPENROUTER_API_KEY` | [openrouter.ai/keys](https://openrouter.ai/keys) | The agent panel cannot think |
 
 You cannot create these accounts yourself — **ask your human for both keys.** While you
-wait, continue to Step 3; the app boots without them, and
-`curl -s http://localhost:3200/api/keys` states exactly what is missing.
+wait, continue to Step 3; the app boots without them and the key-dependent panels
+say so in the browser (API routes answer 401 until keys exist).
 
 ```bash
 cp .env.example .env.local
@@ -100,8 +100,8 @@ TradingView chart if you want it without the wait.
 
 ## Step 4 — verify what state you are in
 
-With **no keys**: the app serves, the chart renders, `/api/keys` names the missing
-keys, and `npm test` plus `npm run check-types` already pass — run both. That is a
+With **no keys**: the app serves, the chart renders, key-dependent API routes return
+401, and `npm test` plus `npm run check-types` already pass — run both. That is a
 correct no-key state, not a failure.
 
 With **both keys** in `.env.local` (restart `npm run dev` after adding them):
