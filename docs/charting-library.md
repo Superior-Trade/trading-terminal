@@ -104,3 +104,10 @@ The library draws candles. Everything else is ours and is in this repository:
 | `components/chart/venue-datafeed-router.ts` | Routes a symbol to the right venue |
 | `components/chart/footprint-overlay.tsx` | Order-flow footprint drawn over the chart |
 | `lib/chart-bridge.tsx` | Lets the agent read and draw on the chart |
+
+## Testing the preview chart with Advanced Charts installed
+
+Set `FORCE_PREVIEW_CHART=1` when starting the dev server to build against the
+bundled Lightweight Charts preview even when `public/static/charting_library`
+exists. This is how you test the fresh-clone experience without moving the
+TradingView install.

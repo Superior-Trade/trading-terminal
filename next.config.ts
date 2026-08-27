@@ -9,7 +9,9 @@ import { withSentryConfig } from "@sentry/nextjs";
 // the call — the answer has to reach the browser, so it rides an env var, and
 // the import path is aliased to a stub so the bundler still resolves it.
 const CHARTS_DIR = path.join(process.cwd(), "public", "static", "charting_library");
-const HAS_ADVANCED_CHARTS = existsSync(path.join(CHARTS_DIR, "charting_library.js"));
+const HAS_ADVANCED_CHARTS =
+  !process.env.FORCE_PREVIEW_CHART &&
+  existsSync(path.join(CHARTS_DIR, "charting_library.js"));
 
 // Error monitoring is opt-in. Without SENTRY_ORG + SENTRY_PROJECT the config
 // below is never applied, so a self-hosted build uploads nothing anywhere.
