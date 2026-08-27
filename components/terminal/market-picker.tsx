@@ -68,6 +68,20 @@ export function unsubscribeQuietly(
   void sub?.unsubscribe?.().catch(() => {});
 }
 
+/** Keyboard highlight stepper for the market list. -1 means nothing is
+ *  highlighted (the user is typing). ArrowDown enters the list at the top,
+ *  ArrowUp enters it at the bottom; both clamp at the edges. */
+export function stepHighlight(
+  current: number,
+  key: "ArrowDown" | "ArrowUp",
+  count: number,
+): number {
+  if (count <= 0) return -1;
+  if (key === "ArrowDown")
+    return current < 0 ? 0 : Math.min(current + 1, count - 1);
+  return current < 0 ? count - 1 : Math.max(current - 1, 0);
+}
+
 // ── Warm metrics cache ───────────────────────────────────────────────────
 // The full sweep (2 + N-dex REST calls) used to run only when the picker
 // OPENED, so the first open always showed a visibly-populating list. The
@@ -197,7 +211,8 @@ function VenueDropdown({
 export function MarketPicker() {
   const { t } = useLang();
   const { pair, setPair } = usePair();
-  const { info, subscription, assets, assetsByName, isReady } = useHyperliquid();
+  const { info, subscription, assets, assetsByName, isReady, loadError } =
+    useHyperliquid();
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<Tab>("All");
   const [query, setQuery] = useState("");
@@ -218,6 +233,9 @@ export function MarketPicker() {
   const metricsAtRef = useRef<number>(seeded?.ts ?? 0);
   const searchRef = useRef<HTMLInputElement>(null);
   const activeRowRef = useRef<HTMLDivElement | null>(null);
+  // Keyboard highlight over the filtered rows (-1 = none; typing resets it).
+  const [hl, setHl] = useState(-1);
+  const hlRowRef = useRef<HTMLDivElement | null>(null);
 
   const hip3Dexes = useMemo(
     () =>
@@ -455,6 +473,7 @@ export function MarketPicker() {
   }, [assets, query, tab, subTag, hideLowVol, metrics, sortKey, sortDesc, venueUi, venueFilter, lighter.markets]);
 
   const toggleSort = (k: SortKey) => {
+    setHl(-1); // rows reorder — a kept index would point at a different market
     if (sortKey === k) setSortDesc((d) => !d);
     else {
       setSortKey(k);
@@ -477,6 +496,50 @@ export function MarketPicker() {
     setPair(lighterPair);
     track("pair_changed", { pair: lighterPair, venue: "lighter" });
   };
+
+  const pickRow = (row: Row) =>
+    row.kind === "hl" ? pick(row.asset) : pickLighter(row.market);
+
+  // ── keyboard flow ─────────────────────────────────────────────────────
+  // The search input keeps focus; arrows walk the filtered list, Enter picks
+  // the highlighted row (closing the panel — a keyboard select means "done",
+  // unlike a mouse click which keeps it open to browse), ESC closes. The
+  // highlight resets wherever the row list changes shape (typing, tab/venue
+  // switches, reopen) — handled at those call sites, not via an effect.
+  useEffect(() => {
+    hlRowRef.current?.scrollIntoView({ block: "nearest" });
+  }, [hl]);
+  const onSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      setHl((c) => stepHighlight(c, e.key as "ArrowDown" | "ArrowUp", rows.length));
+      return;
+    }
+    if (e.key === "Enter") {
+      // Highlighted row wins; with none, a filter narrowed to ONE row picks
+      // it (the type-and-enter flow).
+      const row = hl >= 0 && hl < rows.length ? rows[hl] : rows.length === 1 ? rows[0] : null;
+      if (row) {
+        e.preventDefault();
+        pickRow(row);
+        setOpen(false);
+      }
+      return;
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      setOpen(false);
+    }
+  };
+  // ESC closes even when focus wandered off the search input.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
 
   // Venue of the CURRENT pair + its Lighter market row (when applicable) —
   // both resolve to HL/undefined while the flag is off, keeping every
@@ -558,6 +621,7 @@ export function MarketPicker() {
     const onOpen = (e: Event) => {
       const d = (e as CustomEvent<{ x?: number; y?: number }>).detail;
       setAnchor({ x: d?.x ?? 16, y: d?.y ?? 96 });
+      setHl(-1);
       setOpen((o) => !o);
     };
     window.addEventListener("cg:open-market-picker", onOpen);
@@ -668,6 +732,7 @@ export function MarketPicker() {
               onChange={(v) => {
                 setVenueFilter(v);
                 setVenueMenuOpen(false);
+                setHl(-1);
               }}
               open={venueMenuOpen}
               setOpen={setVenueMenuOpen}
@@ -676,7 +741,11 @@ export function MarketPicker() {
               <input
                 ref={searchRef}
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => {
+              setQuery(e.target.value);
+              setHl(-1);
+            }}
+                onKeyDown={onSearchKeyDown}
                 placeholder={t("mktSearch")}
                 className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3.5 py-2.5 font-mono text-[13px] text-white placeholder-white/30 outline-none"
               />
@@ -686,7 +755,11 @@ export function MarketPicker() {
           <input
             ref={searchRef}
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setHl(-1);
+            }}
+            onKeyDown={onSearchKeyDown}
             placeholder={t("mktSearch")}
             className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3.5 py-2.5 font-mono text-[13px] text-white placeholder-white/30 outline-none"
           />
@@ -744,6 +817,7 @@ export function MarketPicker() {
                     onClick={() => {
                       setTab(tb);
                       setSubTag(null);
+                      setHl(-1);
                     }}
                     className={`rounded-full font-mono text-[11px] font-bold uppercase tracking-wider ${
                       on
@@ -759,7 +833,10 @@ export function MarketPicker() {
                       return (
                         <button
                           key={tg}
-                          onClick={() => setSubTag((c) => (c === tg ? null : tg))}
+                          onClick={() => {
+                            setSubTag((c) => (c === tg ? null : tg));
+                            setHl(-1);
+                          }}
                           className={`rounded-full px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider transition-colors ${
                             active
                               ? "bg-black text-lime-300"
@@ -779,6 +856,7 @@ export function MarketPicker() {
                 onClick={() => {
                   setTab(tb);
                   setSubTag(null);
+                  setHl(-1);
                 }}
                 className={`rounded-full px-3 py-1 font-mono text-[11px] font-bold uppercase tracking-wider transition-colors ${
                   tab === tb
@@ -794,7 +872,10 @@ export function MarketPicker() {
             <input
               type="checkbox"
               checked={hideLowVol}
-              onChange={(e) => setHideLowVol(e.target.checked)}
+              onChange={(e) => {
+                setHideLowVol(e.target.checked);
+                setHl(-1);
+              }}
               className="h-3.5 w-3.5 cursor-pointer accent-lime-400"
             />
             {t("hideLowVol")}
@@ -818,7 +899,10 @@ export function MarketPicker() {
           </button>
         </div>
         <div className="mt-1 max-h-[50vh] overflow-y-auto">
-          {rows.map((row) => {
+          {rows.map((row, i) => {
+            // Keyboard highlight rides on top of the active-pair tint.
+            const isHl = i === hl;
+            const hlCls = isHl ? "bg-white/[0.08] ring-1 ring-inset ring-lime-400/40" : "";
             // ── Lighter rows (only ever present behind the flag) ─────────
             if (row.kind === "lighter") {
               const lm = row.market;
@@ -827,13 +911,13 @@ export function MarketPicker() {
               return (
                 <div
                   key={`lighter:${lm.marketId}`}
-                  ref={lActive ? activeRowRef : undefined}
+                  ref={isHl ? hlRowRef : lActive ? activeRowRef : undefined}
                 >
                   <button
                     onClick={() => pickLighter(lm)}
                     className={`flex w-full items-center gap-4 rounded-lg px-2.5 py-2.5 text-left transition-colors hover:bg-white/[0.07] ${
                       lActive ? "bg-lime-400/10" : ""
-                    }`}
+                    } ${hlCls}`}
                   >
                     <span className="flex min-w-0 flex-1 items-center gap-2">
                       <span className="shrink-0 font-mono text-[13px] font-bold text-white">
@@ -898,13 +982,13 @@ export function MarketPicker() {
             return (
               <div
                 key={`${a.marketType}:${a.name}`}
-                ref={active ? activeRowRef : undefined}
+                ref={isHl ? hlRowRef : active ? activeRowRef : undefined}
               >
                 <button
                   onClick={() => pick(a)}
                   className={`flex w-full items-center gap-4 rounded-lg px-2.5 py-2.5 text-left transition-colors hover:bg-white/[0.07] ${
                     active ? "bg-lime-400/10" : ""
-                  }`}
+                  } ${hlCls}`}
                 >
                   <span className="flex min-w-0 flex-1 items-center gap-2">
                     {/* Ticker stays pinned; only the full name truncates. */}
@@ -954,13 +1038,32 @@ export function MarketPicker() {
               </div>
             );
           })}
-          {!rows.length && (
-            <div className="px-2 py-6 text-center font-mono text-[11px] text-white/35">
-              {venueUi && venueFilter === "lighter" && lighter.status === "error"
-                ? t("lighterMktsUnavailable")
-                : t("noMarkets")}
-            </div>
-          )}
+          {!rows.length &&
+            (() => {
+              // Distinguish "still loading" and "venue unreachable" from a
+              // genuinely empty filter result — an empty list during the
+              // first universe fetch is not "no markets match".
+              const lighterOnly = venueUi && venueFilter === "lighter";
+              const loading =
+                !query &&
+                (lighterOnly
+                  ? lighter.status === "loading" || lighter.status === "idle"
+                  : !isReady && !loadError);
+              const failed = lighterOnly
+                ? lighter.status === "error"
+                : !isReady && loadError !== null;
+              return (
+                <div className="px-2 py-6 text-center font-mono text-[11px] text-white/35">
+                  {loading
+                    ? t("mktLoading")
+                    : failed
+                      ? lighterOnly
+                        ? t("lighterMktsUnavailable")
+                        : t("mktLoadError")
+                      : t("noMarkets")}
+                </div>
+              );
+            })()}
         </div>
       </div>
       </div>

@@ -458,6 +458,11 @@ const DICT: Record<string, { en: string; zh: string }> = {
   colVolume: { en: "Volume", zh: "成交量" },
   colOpenInt: { en: "Open Int.", zh: "未平倉" },
   noMarkets: { en: "No markets match", zh: "沒有符合的市場" },
+  mktLoading: { en: "Loading markets…", zh: "市場載入中…" },
+  mktLoadError: {
+    en: "Markets unavailable — check your connection and reload",
+    zh: "市場資料無法取得 — 請檢查網路連線後重新整理",
+  },
   // Venue layer (flag-gated Lighter integration).
   venuePicker: { en: "Venue", zh: "交易所" },
   venueAll: { en: "All", zh: "全部" },

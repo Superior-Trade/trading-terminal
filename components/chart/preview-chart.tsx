@@ -8,12 +8,16 @@ import {
   LineStyle,
   CrosshairMode,
   ColorType,
+  type CreatePriceLineOptions,
   type IChartApi,
   type ISeriesApi,
   type IPriceLine,
+  type LineData,
   type LineWidth,
   type MouseEventParams,
+  type Time,
   type UTCTimestamp,
+  type WhitespaceData,
 } from "lightweight-charts";
 import { TrendLinePrimitive } from "./trend-line-primitive";
 import { BrushPrimitive, simplifyIndices, MIN_SAMPLE_PX } from "./brush-primitive";
@@ -27,8 +31,19 @@ import {
   type ChartActionResult,
   type ChartContext,
 } from "../../lib/chart-bridge";
-import { RESOLUTION_TO_HL, RESOLUTION_TO_MS } from "./hyperliquid-datafeed";
-import { pairToCoin } from "../../lib/hyperliquid-provider";
+import { fetchPreviewCandles } from "./preview-market-data";
+import {
+  useHyperliquid,
+  pairToCoin,
+  coinToPair,
+  type AssetMeta,
+} from "../../lib/hyperliquid-provider";
+import {
+  LIGHTER_SYMBOL_PREFIX,
+  stripVenuePrefix,
+  venueOfSymbol,
+  VENUES,
+} from "../../lib/venues";
 
 /**
  * The preview chart: TradingView's Lightweight Charts, which is Apache-2.0 and
@@ -38,6 +53,13 @@ import { pairToCoin } from "../../lib/hyperliquid-provider";
  * the real chart and everything is built for it, but TradingView licenses that
  * one to you individually and forbids redistribution, so a fresh clone would
  * otherwise not start until they had approved you.
+ *
+ * Pair selection matches the Advanced path's wiring exactly: the pill in the
+ * top-left is a dumb label + trigger for the SAME MarketPicker panel the TV
+ * toolbar button opens (via "cg:open-market-picker" / "cg:pair-metrics"), so
+ * a switch flows MarketPicker → setPair → URL + analytics + agent context on
+ * either chart. Candles route by venue (Hyperliquid info API / zklighter)
+ * like the Advanced datafeed router.
  *
  * The toolbar below covers the chat pencil's whole tool list — the freehand
  * brush, trendlines, rays, horizontal levels, vertical lines, rectangles and
@@ -209,36 +231,99 @@ const TOOLBAR: Array<{
   { tool: "fib", name: "Fib retracement", Icon: FibIcon },
 ];
 
-/** Hyperliquid candles, straight from the public info endpoint. */
-async function fetchCandles(coin: string, resolution: string): Promise<Candle[]> {
-  const interval = RESOLUTION_TO_HL[resolution] ?? "4h";
-  const ms = RESOLUTION_TO_MS[resolution] ?? 14_400_000;
-  const endTime = Date.now();
-  const startTime = endTime - ms * 500;
-  const res = await fetch("https://api.hyperliquid.xyz/info", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      type: "candleSnapshot",
-      req: { coin, interval, startTime, endTime },
-    }),
-  });
-  if (!res.ok) throw new Error(`candles ${res.status}`);
-  const raw = (await res.json()) as Array<{
-    t: number; o: string; h: string; l: string; c: string;
-  }>;
-  return raw.map((c) => ({
-    time: Math.floor(c.t / 1000) as UTCTimestamp,
-    open: Number(c.o),
-    high: Number(c.h),
-    low: Number(c.l),
-    close: Number(c.c),
-  }));
+/** Drawings stashed for a symbol the chart has navigated away from. The
+ *  primitive OBJECTS survive detached; price lines and line series are
+ *  library-owned, so their recreate-options/data are captured instead. */
+interface StashedDrawing {
+  d: Drawing;
+  lineOpts?: CreatePriceLineOptions;
+  seriesData?: Array<LineData<Time> | WhitespaceData<Time>>;
+  seriesOpts?: { color: string; lineWidth: LineWidth };
+}
+
+// What MarketPicker broadcasts on "cg:pair-metrics" (same contract the
+// Advanced path's TV-toolbar pill consumes).
+interface PairMetricsDetail {
+  pair?: string;
+  label?: string;
+  chg?: string;
+  up?: boolean;
+  lev?: string;
+}
+
+/**
+ * The pair pill — the preview's stand-in for the Advanced path's TV-toolbar
+ * pair button. Same wiring: it is a dumb label fed by "cg:pair-metrics"
+ * (dispatched by MarketPicker in the header), and clicking it opens the SAME
+ * MarketPicker panel via "cg:open-market-picker" at the pill's position. So
+ * switching pairs here rides the exact state path the Advanced chart uses:
+ * MarketPicker → setPair → URL rewrite + cg:pair-changed + pair_changed
+ * analytics → the pair prop lands back on this chart.
+ */
+function PairPill({ symbol }: { symbol: string }) {
+  const [metrics, setMetrics] = useState<PairMetricsDetail | null>(null);
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    const onMetrics = (e: Event) => {
+      const d = (e as CustomEvent<PairMetricsDetail>).detail;
+      if (d) setMetrics(d);
+    };
+    window.addEventListener("cg:pair-metrics", onMetrics);
+    // Replay the snapshot dispatched before this chart mounted.
+    window.dispatchEvent(new CustomEvent("cg:request-pair-metrics"));
+    return () => window.removeEventListener("cg:pair-metrics", onMetrics);
+  }, []);
+  // Metrics describe the picker's CURRENT pair; ignore them while they lag a
+  // just-switched symbol so the pill never labels the wrong market.
+  const live =
+    metrics && (metrics.pair ?? "").toLowerCase() === symbol.toLowerCase()
+      ? metrics
+      : null;
+  const label =
+    live?.label ??
+    (venueOfSymbol(symbol) === "lighter"
+      ? `${stripVenuePrefix(symbol)} · ${VENUES.lighter.label}`
+      : pairToCoin(symbol));
+  return (
+    <button
+      ref={btnRef}
+      onClick={() => {
+        const r = btnRef.current?.getBoundingClientRect();
+        window.dispatchEvent(
+          new CustomEvent("cg:open-market-picker", {
+            detail: { x: r?.left ?? 16, y: (r?.bottom ?? 40) + 8 },
+          }),
+        );
+      }}
+      title="Switch market"
+      aria-label="Switch market"
+      aria-haspopup="dialog"
+      className="flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-black/60 px-2.5 font-mono text-[11.5px] font-bold text-white/85 backdrop-blur transition-colors hover:bg-white/10 hover:text-white"
+    >
+      <span className="max-w-[200px] truncate">{label}</span>
+      {live?.lev && (
+        <span className="rounded-full bg-white/10 px-1.5 py-px text-[10px] font-semibold text-white/65">
+          {live.lev}
+        </span>
+      )}
+      {live?.chg && (
+        <span
+          className={`rounded-full bg-white/10 px-1.5 py-px text-[10px] font-semibold ${
+            live.up ? "text-lime-300" : "text-red-400"
+          }`}
+        >
+          {live.chg}
+        </span>
+      )}
+      <span className="text-[9px] text-white/40">▾</span>
+    </button>
+  );
 }
 
 export function PreviewChart({
   pair,
   resolution = "240",
+  onSymbolChange,
 }: {
   pair: string;
   resolution?: string;
@@ -252,6 +337,25 @@ export function PreviewChart({
   const [tf, setTf] = useState(resolution);
   const [symbol, setSymbol] = useState(pair);
   const [error, setError] = useState<string | null>(null);
+  // Parent owns pair state (the pair-prop effect echoes it back into
+  // `symbol`); the agent's set_symbol routes through it like the Advanced
+  // path so URL, header picker, and agent context all move together.
+  const onSymbolChangeRef = useRef(onSymbolChange);
+  useEffect(() => {
+    onSymbolChangeRef.current = onSymbolChange;
+  }, [onSymbolChange]);
+  // Market universe, for resolving loose set_symbol input ("BTC", "BTC/USD")
+  // exactly like the Advanced handler does.
+  const { assetsByName } = useHyperliquid();
+  const assetsByNameRef = useRef(assetsByName);
+  useEffect(() => {
+    assetsByNameRef.current = assetsByName;
+  }, [assetsByName]);
+  // Drawings belonging to symbols the chart navigated away from, keyed by
+  // symbol — mirrors Advanced Charts, where line tools are per-symbol
+  // (hidden on switch, back on return).
+  const stashRef = useRef<Map<string, StashedDrawing[]>>(new Map());
+  const prevSymbolRef = useRef(pair);
   // ── user drawing state ───────────────────────────────────────────────
   // The armed tool stays armed after each drawing (matching the Advanced
   // Charts path's sticky tools) until re-clicked, ESC, or select_tool cursor.
@@ -324,7 +428,7 @@ export function PreviewChart({
     let cancelled = false;
     const load = async () => {
       try {
-        const candles = await fetchCandles(pairToCoin(symbol), tf);
+        const candles = await fetchPreviewCandles(symbol, tf);
         if (cancelled || !seriesRef.current) return;
         candlesRef.current = candles;
         seriesRef.current.setData(candles);
@@ -546,6 +650,62 @@ export function PreviewChart({
     selectedIdRef.current = null;
     setSelected(null);
   }, [unrender]);
+
+  // ── drawings across pair switches ────────────────────────────────────
+  // Advanced Charts scopes line tools to the symbol they were drawn on:
+  // switching pair hides them, switching back shows them again. Mirror
+  // that — stash the current symbol's drawings on the way out, restore the
+  // incoming symbol's stash on the way in. Primitives survive detached as
+  // objects; price lines and line series are recreated from captured
+  // options/data (they die with removePriceLine/removeSeries).
+  useEffect(() => {
+    const prev = prevSymbolRef.current;
+    if (prev === symbol) return;
+    prevSymbolRef.current = symbol;
+    const chart = chartRef.current;
+    const s = seriesRef.current;
+    // Deselect first so captured line widths are the unselected ones.
+    selectDrawing(null);
+    const outgoing: StashedDrawing[] = drawings.current.map((d) => {
+      const entry: StashedDrawing = { d };
+      if (d.line) entry.lineOpts = { ...d.line.options() };
+      if (d.series) {
+        entry.seriesData = [...d.series.data()];
+        const so = d.series.options();
+        entry.seriesOpts = { color: so.color, lineWidth: so.lineWidth };
+      }
+      return entry;
+    });
+    for (const d of drawings.current) unrender(d);
+    drawings.current = [];
+    if (outgoing.length) stashRef.current.set(prev, outgoing);
+    else stashRef.current.delete(prev);
+    // Stale candles must not render under the new symbol's label while the
+    // first fetch is in flight.
+    candlesRef.current = [];
+    s?.setData([]);
+    const incoming = stashRef.current.get(symbol);
+    stashRef.current.delete(symbol);
+    if (!incoming || !chart || !s) return;
+    for (const e of incoming) {
+      const d = e.d;
+      d.line = e.lineOpts ? (s.createPriceLine(e.lineOpts) ?? undefined) : undefined;
+      d.series = undefined;
+      if (e.seriesData && e.seriesOpts) {
+        const ls = chart.addSeries(LineSeries, {
+          color: e.seriesOpts.color,
+          lineWidth: e.seriesOpts.lineWidth,
+          priceLineVisible: false,
+          lastValueVisible: false,
+          crosshairMarkerVisible: false,
+        });
+        ls.setData(e.seriesData);
+        d.series = ls;
+      }
+      if (d.primitive) s.attachPrimitive(d.primitive);
+      drawings.current.push(d);
+    }
+  }, [symbol, unrender, selectDrawing]);
 
   // ── user drawing (the toolbar) ───────────────────────────────────────
   const cancelPending = useCallback(() => {
@@ -922,9 +1082,45 @@ export function PreviewChart({
           case "set_timeframe":
             setTf(action.resolution);
             return { ok: true };
-          case "set_symbol":
-            setSymbol(action.pair);
+          case "set_symbol": {
+            // Same resolution + propagation contract as the Advanced path:
+            // accept BTC-USD / BTC / BTC/USD / xyz:TSLA / LIGHTER:BTC-PERP,
+            // reject unknown pairs so the agent can self-correct, and hand
+            // the switch to the PARENT (URL rewrite, cg:pair-changed, header
+            // picker) rather than mutating only this chart.
+            const raw = action.pair.trim();
+            let display: string;
+            if (raw.toUpperCase().startsWith(LIGHTER_SYMBOL_PREFIX)) {
+              display = raw.toUpperCase();
+            } else {
+              const byName = assetsByNameRef.current;
+              const stripped = raw.includes(":") ? raw : raw.replace(/[-/]USD$/i, "");
+              const candidates = [raw, pairToCoin(raw), stripped, raw.toUpperCase()];
+              let asset: AssetMeta | undefined;
+              for (const c of candidates) {
+                asset =
+                  byName.get(c) ??
+                  [...byName.values()].find(
+                    (a) => a.name.toLowerCase() === c.toLowerCase(),
+                  );
+                if (asset) break;
+              }
+              if (!asset) {
+                // Universe still loading: pass the pair through un-validated
+                // rather than wrongly calling it unknown.
+                if (byName.size === 0) {
+                  display = coinToPair(pairToCoin(raw));
+                } else {
+                  return { ok: false, error: `Unknown pair: ${action.pair}` };
+                }
+              } else {
+                display = coinToPair(asset.name);
+              }
+            }
+            if (onSymbolChangeRef.current) onSymbolChangeRef.current(display);
+            else setSymbol(display);
             return { ok: true };
+          }
           case "set_range":
             chartRef.current?.timeScale().setVisibleRange({
               from: action.from as UTCTimestamp,
@@ -1156,7 +1352,10 @@ export function PreviewChart({
           ×
         </button>
       )}
-      <div className="absolute left-3 top-3 z-20 flex items-center gap-0.5 rounded-lg border border-white/10 bg-black/60 p-1 backdrop-blur">
+      <div className="absolute left-3 top-3 z-20 flex items-center gap-2">
+        {/* Pair selection first, like the Advanced toolbar's pair pill. */}
+        <PairPill symbol={symbol} />
+        <div className="flex items-center gap-0.5 rounded-lg border border-white/10 bg-black/60 p-1 backdrop-blur">
         {TOOLBAR.map(({ tool: t, name, Icon }) => (
           <span key={t} className="flex items-center gap-0.5">
             {/* lines | shapes */}
@@ -1188,6 +1387,7 @@ export function PreviewChart({
             {HINT[tool]} · esc
           </span>
         )}
+        </div>
       </div>
       {error && (
         <div className="pointer-events-none absolute inset-x-0 top-3 mx-auto w-fit rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-1.5 font-mono text-[11px] text-red-300">

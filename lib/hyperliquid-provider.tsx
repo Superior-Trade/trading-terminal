@@ -90,6 +90,9 @@ interface HyperliquidContextType {
   /** Ordered asset names keyed by DEX name ("" = main DEX). */
   perpUniversesByDex: Map<string, string[]>;
   isReady: boolean;
+  /** Why the universe failed to load (null while loading / on success) — lets
+   *  the market picker say "unavailable" instead of spinning forever. */
+  loadError: string | null;
 }
 
 const HyperliquidContext = createContext<HyperliquidContextType | null>(null);
@@ -151,6 +154,7 @@ export function HyperliquidProvider({ children }: { children: ReactNode }) {
     Map<string, string[]>
   >(new Map());
   const [isReady, setIsReady] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const info = getInfoClient();
   const subscription = getSubscriptionClient();
@@ -197,6 +201,7 @@ export function HyperliquidProvider({ children }: { children: ReactNode }) {
           setAssets(assetList);
           setAssetsByName(byName);
           setPerpUniversesByDex(universesByDex);
+          setLoadError(null);
           setIsReady(true);
         };
 
@@ -226,6 +231,8 @@ export function HyperliquidProvider({ children }: { children: ReactNode }) {
         }
       } catch (err) {
         console.warn("Failed to fetch Hyperliquid meta:", err);
+        if (!cancelled)
+          setLoadError(err instanceof Error ? err.message : "universe fetch failed");
       }
     }
 
@@ -245,6 +252,7 @@ export function HyperliquidProvider({ children }: { children: ReactNode }) {
         assetsByName,
         perpUniversesByDex,
         isReady,
+        loadError,
       }}
     >
       {children}

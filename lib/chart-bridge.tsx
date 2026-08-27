@@ -8,6 +8,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useRef,
   type ReactNode,
 } from "react";
@@ -215,6 +216,19 @@ export function ChartBridgeProvider({ children }: { children: ReactNode }) {
       return null;
     }
   }, []);
+
+  // Dev escape hatch (mirrors window.__tvWidget): drive the bridge from the
+  // console or a headless test — window.__chartBridge.getChartContext(),
+  // .dispatchChartAction({ action: "set_symbol", pair: "ETH-USD" }), …
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).__chartBridge = { dispatchChartAction, getChartContext };
+    return () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      delete (window as any).__chartBridge;
+    };
+  }, [dispatchChartAction, getChartContext]);
 
   return (
     <ChartBridgeContext.Provider
