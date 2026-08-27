@@ -43,8 +43,15 @@ function renderToCalls(primitive: TrendLinePrimitive) {
         context: typeof ctx;
         horizontalPixelRatio: number;
         verticalPixelRatio: number;
+        bitmapSize: { width: number; height: number };
       }) => void,
-    ) => fn({ context: ctx, horizontalPixelRatio: 2, verticalPixelRatio: 2 }),
+    ) =>
+      fn({
+        context: ctx,
+        horizontalPixelRatio: 2,
+        verticalPixelRatio: 2,
+        bitmapSize: { width: 200, height: 200 },
+      }),
   } as unknown as RenderTarget;
   renderer?.draw(target);
   return calls;
@@ -74,6 +81,21 @@ describe("TrendLinePrimitive", () => {
     attachStub(prim);
     const calls = renderToCalls(prim);
     expect(calls).toEqual([]); // no half-drawn line to a wrong place
+  });
+
+  test("as a ray, extends past the second anchor to the pane edge", () => {
+    const prim = new TrendLinePrimitive(
+      { time: 100 as Time, price: 900 },
+      { time: 200 as Time, price: 500 },
+      "#fbbf24",
+      true,
+    );
+    attachStub(prim);
+    const calls = renderToCalls(prim);
+    // Segment runs (20,20)→(100,100); the ray carries the same slope on to
+    // the 200×200 bitmap's corner instead of stopping at the anchor.
+    expect(calls).toContainEqual(["moveTo", 20, 20]);
+    expect(calls).toContainEqual(["lineTo", 200, 200]);
   });
 
   test("setPoints moves the anchors and requests a repaint", () => {

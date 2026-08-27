@@ -49,8 +49,8 @@ export function PreviewChartBanner() {
           </div>
           <p className="mt-1 text-[12.5px] leading-relaxed text-white/75">
             Running Lightweight Charts. The market, the agent&apos;s levels, the toolbar&apos;s
-            trendlines and levels, and every deploy work — but the full drawing
-            toolset and indicator studies are off.{" "}
+            drawing tools, and every deploy work — but the brush, text notes and
+            indicator studies are off.{" "}
             <a
               href="https://www.tradingview.com/advanced-charts/"
               target="_blank"
@@ -63,6 +63,15 @@ export function PreviewChartBanner() {
             <code className="rounded bg-black/40 px-1 py-0.5 font-mono text-[11px] text-amber-200">
               npm run setup:charts
             </code>
+            {" "}— or use the full chart on the hosted terminal at{" "}
+            <a
+              href="https://terminal.superior.trade"
+              target="_blank"
+              rel="noreferrer noopener"
+              className="text-amber-200 underline underline-offset-2 hover:text-amber-100"
+            >
+              terminal.superior.trade
+            </a>
             .
           </p>
         </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, type ReactElement } from "react";
 import {
   createChart,
   CandlestickSeries,
@@ -15,6 +15,9 @@ import {
   type UTCTimestamp,
 } from "lightweight-charts";
 import { TrendLinePrimitive } from "./trend-line-primitive";
+import { RectanglePrimitive } from "./rectangle-primitive";
+import { VerticalLinePrimitive } from "./vertical-line-primitive";
+import { FibRetracementPrimitive } from "./fib-retracement-primitive";
 import {
   useChartBridge,
   type ChartAction,
@@ -34,13 +37,15 @@ import { pairToCoin } from "../../lib/hyperliquid-provider";
  * otherwise not start until they had approved you.
  *
  * WHAT THIS CANNOT DO, because Lightweight Charts has no concept of them:
- *   - the full drawing toolset. The toolbar below gives you trendlines and
- *     horizontal levels (a level is a native price line; a trendline is an
- *     ISeriesPrimitive, so both are price/time-anchored and survive pan and
- *     zoom), and everything you draw lands in ChartContext.drawings with
- *     origin "user" — the same structure the Advanced Charts path reports —
- *     so the agent reads your sketch either way. Rectangles, fibs, brush and
- *     the rest still need Advanced Charts.
+ *   - the freehand brush and text notes. The toolbar below covers the rest of
+ *     the chat pencil's tool list — trendlines, rays, horizontal levels,
+ *     vertical lines, rectangles and fib retracements. A level is a native
+ *     price line; everything else is an ISeriesPrimitive, so all of it is
+ *     price/time-anchored and survives pan and zoom. Everything you draw
+ *     lands in ChartContext.drawings with origin "user" and the TradingView
+ *     kind names — the same structure the Advanced Charts path reports — so
+ *     the agent reads your sketch either way. The brush would need drag
+ *     capture that fights chart panning; it stays Advanced-only.
  *   - indicator studies. No study engine and no indicator UI.
  *   - the order-flow footprint overlay, which is drawn against Advanced
  *     Charts' pane geometry.
@@ -58,22 +63,133 @@ const UP = "#a3e635";
 const DOWN = "#ef4444";
 /** User drawings are amber, so yours and the agent's stay tellable apart. */
 const USER = "#fbbf24";
+const USER_FILL = "rgba(251,191,36,0.12)";
 
 type Candle = { time: UTCTimestamp; open: number; high: number; low: number; close: number };
 
-type UserTool = "trendline" | "level";
+type UserTool = "trendline" | "ray" | "level" | "vline" | "rect" | "fib";
+
+/** Toolbar tool → the TradingView kind name the drawing reports. */
+const KIND: Record<UserTool, string> = {
+  trendline: "trend_line",
+  ray: "ray",
+  level: "horizontal_line",
+  vline: "vertical_line",
+  rect: "rectangle",
+  fib: "fib_retracement",
+};
+
+/** select_tool arrives with TradingView selectLineTool names; map the ones
+ *  the preview can honour onto toolbar tools. */
+const TOOL_FOR_NAME: Record<string, UserTool> = {
+  trend_line: "trendline",
+  ray: "ray",
+  horizontal_line: "level",
+  vertical_line: "vline",
+  rectangle: "rect",
+  fib_retracement: "fib",
+};
+
+const HINT: Record<UserTool, string> = {
+  trendline: "click two points",
+  ray: "click two points",
+  level: "click a price",
+  vline: "click a bar",
+  rect: "click two corners",
+  fib: "click two points",
+};
+
+type TwoPointPrimitive =
+  | TrendLinePrimitive
+  | RectanglePrimitive
+  | FibRetracementPrimitive;
+type PreviewPrimitive = TwoPointPrimitive | VerticalLinePrimitive;
 
 interface Drawing {
   id: string;
   kind: string;
   line?: IPriceLine;
   series?: ISeriesApi<"Line">;
-  primitive?: TrendLinePrimitive;
+  primitive?: PreviewPrimitive;
   label?: string;
   points: Array<{ time: number; price: number }>;
   /** Who drew it. Absent means the agent; the toolbar sets "user". */
   origin?: "user" | "agent";
 }
+
+// ── toolbar icons ──────────────────────────────────────────────────────
+// Same visual language as the chat pencil's tool picker, redrawn small.
+
+type IconProps = { className?: string };
+
+function TrendIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className={className}>
+      <path d="M5 19 19 5" />
+      <circle cx="5" cy="19" r="1.6" fill="currentColor" stroke="none" />
+      <circle cx="19" cy="5" r="1.6" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function RayIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className={className}>
+      <path d="M6 18 20 4" />
+      <circle cx="6" cy="18" r="2" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function HLineIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className={className}>
+      <path d="M3 12h18" />
+      <circle cx="12" cy="12" r="2" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function VLineIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className={className}>
+      <path d="M12 3v18" />
+      <circle cx="12" cy="12" r="2" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function RectIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" className={className}>
+      <rect x="4" y="7" width="16" height="10" rx="1" />
+    </svg>
+  );
+}
+
+function FibIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" className={className}>
+      <path d="M4 5h16" />
+      <path d="M4 10h16" opacity="0.75" />
+      <path d="M4 14h16" opacity="0.55" />
+      <path d="M4 19h16" opacity="0.4" />
+    </svg>
+  );
+}
+
+const TOOLBAR: Array<{
+  tool: UserTool;
+  name: string;
+  Icon: (p: IconProps) => ReactElement;
+}> = [
+  { tool: "trendline", name: "Trendline", Icon: TrendIcon },
+  { tool: "ray", name: "Ray", Icon: RayIcon },
+  { tool: "level", name: "Horizontal level", Icon: HLineIcon },
+  { tool: "vline", name: "Vertical line", Icon: VLineIcon },
+  { tool: "rect", name: "Rectangle", Icon: RectIcon },
+  { tool: "fib", name: "Fib retracement", Icon: FibIcon },
+];
 
 /** Hyperliquid candles, straight from the public info endpoint. */
 async function fetchCandles(coin: string, resolution: string): Promise<Candle[]> {
@@ -126,10 +242,10 @@ export function PreviewChart({
   useEffect(() => {
     toolRef.current = tool;
   }, [tool]);
-  /** First anchor of an in-progress trendline + its live preview primitive. */
+  /** First anchor of an in-progress two-point shape + its live preview primitive. */
   const pendingRef = useRef<{
     start: { time: UTCTimestamp; price: number };
-    primitive: TrendLinePrimitive;
+    primitive: TwoPointPrimitive;
   } | null>(null);
 
   const {
@@ -271,11 +387,32 @@ export function PreviewChart({
   );
 
   // Click-to-draw. Subscribed once; reads the armed tool through a ref so the
-  // subscription survives re-renders. Points snap to the bar under the cursor
-  // (param.time), which is also what keeps them expressible to the agent.
+  // subscription survives re-renders. Points snap to the bar under the cursor,
+  // which is also what keeps them expressible to the agent.
+  //
+  // Clicks are captured at the DOM, not via chart.subscribeClick: the
+  // library's click counter swallows the second click of a fast pair (< its
+  // 500ms double-click window) whenever it lands 5px or more from the first —
+  // neither click nor dblclick fires — so quickly placed second anchors would
+  // silently vanish. The DOM listener sees every click; the mousedown-distance
+  // guard below keeps a pan that ends on the chart from placing an anchor.
   useEffect(() => {
     const chart = chartRef.current;
-    if (!chart) return;
+    const el = holder.current;
+    if (!chart || !el) return;
+    const resolveXY = (
+      x: number,
+      y: number,
+    ): { time: UTCTimestamp; price: number } | null => {
+      const s = seriesRef.current;
+      if (!s) return null;
+      const pane = chart.paneSize();
+      if (x < 0 || y < 0 || x > pane.width || y > pane.height) return null; // axis areas
+      const t = chart.timeScale().coordinateToTime(x);
+      const price = s.coordinateToPrice(y);
+      if (typeof t !== "number" || price === null) return null;
+      return { time: t as UTCTimestamp, price: Number(price) };
+    };
     const resolve = (
       param: MouseEventParams,
     ): { time: UTCTimestamp; price: number } | null => {
@@ -286,30 +423,61 @@ export function PreviewChart({
       if (typeof t !== "number" || price === null) return null;
       return { time: t as UTCTimestamp, price: Number(price) };
     };
-    const onClick = (param: MouseEventParams) => {
+    let down: { x: number; y: number } | null = null;
+    const onDown = (e: MouseEvent) => {
+      down = { x: e.clientX, y: e.clientY };
+    };
+    const onClick = (e: MouseEvent) => {
       const mode = toolRef.current;
       if (!mode) return;
-      const pt = resolve(param);
+      if (down && Math.abs(e.clientX - down.x) + Math.abs(e.clientY - down.y) >= 5)
+        return; // that was a pan, not a placement
+      const rect = el.getBoundingClientRect();
+      const pt = resolveXY(e.clientX - rect.left, e.clientY - rect.top);
       if (!pt) return;
+      const s = seriesRef.current;
+      if (!s) return;
       const id = `user-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       if (mode === "level") {
         const l = priceLine(pt.price, USER, "");
         if (l)
           remember({
             id,
-            kind: "horizontal_line",
+            kind: KIND.level,
             line: l,
             points: [{ time: Number(pt.time), price: pt.price }],
             origin: "user",
           });
         return;
       }
+      if (mode === "vline") {
+        const primitive = new VerticalLinePrimitive(pt.time, USER);
+        s.attachPrimitive(primitive);
+        remember({
+          id,
+          kind: KIND.vline,
+          primitive,
+          points: [{ time: Number(pt.time), price: pt.price }],
+          origin: "user",
+        });
+        return;
+      }
       const pending = pendingRef.current;
+      if (
+        pending &&
+        Number(pending.start.time) === Number(pt.time) &&
+        pending.start.price === pt.price
+      )
+        // A double-click in place would otherwise finalize a zero-length shape.
+        return;
       if (!pending) {
         // First anchor: attach a preview primitive that follows the cursor.
-        const s = seriesRef.current;
-        if (!s) return;
-        const primitive = new TrendLinePrimitive(pt, pt, USER);
+        const primitive: TwoPointPrimitive =
+          mode === "rect"
+            ? new RectanglePrimitive(pt, pt, USER, USER_FILL)
+            : mode === "fib"
+              ? new FibRetracementPrimitive(pt, pt, USER)
+              : new TrendLinePrimitive(pt, pt, USER, mode === "ray");
         s.attachPrimitive(primitive);
         pendingRef.current = { start: pt, primitive };
         return;
@@ -317,7 +485,7 @@ export function PreviewChart({
       pending.primitive.setPoints(pending.start, pt);
       remember({
         id,
-        kind: "trend_line",
+        kind: KIND[mode],
         primitive: pending.primitive,
         points: [
           { time: Number(pending.start.time), price: pending.start.price },
@@ -333,11 +501,13 @@ export function PreviewChart({
       const pt = resolve(param);
       if (pt) pending.primitive.setPoints(pending.start, pt);
     };
-    chart.subscribeClick(onClick);
+    el.addEventListener("mousedown", onDown);
+    el.addEventListener("click", onClick);
     chart.subscribeCrosshairMove(onMove);
     return () => {
+      el.removeEventListener("mousedown", onDown);
+      el.removeEventListener("click", onClick);
       try {
-        chart.unsubscribeClick(onClick);
         chart.unsubscribeCrosshairMove(onMove);
       } catch {
         /* chart already disposed by the mount effect's cleanup */
@@ -345,7 +515,7 @@ export function PreviewChart({
     };
   }, [priceLine, remember]);
 
-  // ESC drops the armed tool (and any half-placed trendline).
+  // ESC drops the armed tool (and any half-placed two-point shape).
   useEffect(() => {
     if (!tool) return;
     const onKey = (e: KeyboardEvent) => {
@@ -364,7 +534,7 @@ export function PreviewChart({
       const id = `${action.action}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       const unsupported = (what: string): ChartActionResult => ({
         ok: false,
-        error: `${what} needs TradingView Advanced Charts; this build is running the Lightweight Charts preview`,
+        error: `${what} is available with TradingView Advanced Charts (npm run setup:charts) or on the hosted terminal at terminal.superior.trade; this build is running the Lightweight Charts preview`,
       });
       try {
         switch (action.action) {
@@ -464,25 +634,44 @@ export function PreviewChart({
             return { ok: true };
           }
 
+          case "draw_vertical": {
+            const s = seriesRef.current;
+            if (!s) return { ok: false, error: "chart not ready" };
+            // Snap to the nearest bar: timeToCoordinate resolves bar times,
+            // not arbitrary timestamps between them.
+            const candles = candlesRef.current;
+            let t = action.time as UTCTimestamp;
+            for (const c of candles) {
+              if (Math.abs(Number(c.time) - action.time) < Math.abs(Number(t) - action.time))
+                t = c.time;
+            }
+            const primitive = new VerticalLinePrimitive(t, "#a3e635", action.label);
+            s.attachPrimitive(primitive);
+            remember({
+              id,
+              kind: "vertical_line",
+              primitive,
+              label: action.label,
+              points: [{ time: Number(t), price: 0 }],
+            });
+            return { ok: true, shapeId: id };
+          }
+
           // The chat bar's pencil arms tools through select_tool with
-          // TradingView tool names; map the two the preview can honour.
-          case "select_tool":
+          // TradingView tool names; map the ones the preview can honour.
+          case "select_tool": {
+            cancelPending();
             if (action.tool === "cursor") {
-              cancelPending();
               setTool(null);
               return { ok: true };
             }
-            if (action.tool === "trend_line") {
-              cancelPending();
-              setTool("trendline");
-              return { ok: true };
-            }
-            if (action.tool === "horizontal_line") {
-              cancelPending();
-              setTool("level");
+            const mapped = TOOL_FOR_NAME[action.tool];
+            if (mapped) {
+              setTool(mapped);
               return { ok: true };
             }
             return unsupported(`the ${action.tool} tool`);
+          }
 
           // Honest refusals. Returning ok:true here would let the agent claim
           // it had plotted an indicator that is not on screen.
@@ -490,9 +679,8 @@ export function PreviewChart({
           case "remove_indicators":
           case "clear_indicators":
             return unsupported("indicator studies");
-          case "draw_vertical":
           case "draw_text":
-            return unsupported(action.action.replace("draw_", "the ") + " tool");
+            return unsupported("the text tool");
           default:
             return { ok: false, error: "unsupported action" };
         }
@@ -563,20 +751,6 @@ export function PreviewChart({
 
   useEffect(() => setSymbol(pair), [pair]);
 
-  const toolButton = (t: UserTool, label: string, hint: string) => (
-    <button
-      onClick={() => armTool(t)}
-      title={hint}
-      className={`rounded-md px-2 py-1 font-mono text-[11px] transition-colors ${
-        tool === t
-          ? "bg-amber-500/15 text-amber-300"
-          : "text-white/60 hover:bg-white/10 hover:text-white"
-      }`}
-    >
-      {label}
-    </button>
-  );
-
   return (
     <div className="relative h-full w-full">
       <div
@@ -584,20 +758,36 @@ export function PreviewChart({
         className="h-full w-full"
         style={tool ? { cursor: "crosshair" } : undefined}
       />
-      <div className="absolute left-3 top-3 z-20 flex items-center gap-1 rounded-lg border border-white/10 bg-black/60 p-1 backdrop-blur">
-        {toolButton("trendline", "Trendline", "Draw a trendline: click two points")}
-        {toolButton("level", "Level", "Draw a horizontal level: click a price")}
-        <div className="h-4 w-px bg-white/10" />
+      <div className="absolute left-3 top-3 z-20 flex items-center gap-0.5 rounded-lg border border-white/10 bg-black/60 p-1 backdrop-blur">
+        {TOOLBAR.map(({ tool: t, name, Icon }, i) => (
+          <span key={t} className="flex items-center gap-0.5">
+            {/* lines | shapes */}
+            {i === 4 && <span className="mx-0.5 h-4 w-px bg-white/10" />}
+            <button
+              onClick={() => armTool(t)}
+              title={`${name} — ${HINT[t]}`}
+              aria-label={name}
+              className={`flex h-6 w-6 items-center justify-center rounded-md transition-colors ${
+                tool === t
+                  ? "bg-amber-500/15 text-amber-300"
+                  : "text-white/60 hover:bg-white/10 hover:text-white"
+              }`}
+            >
+              <Icon className="h-3.5 w-3.5" />
+            </button>
+          </span>
+        ))}
+        <span className="mx-0.5 h-4 w-px bg-white/10" />
         <button
           onClick={clearDrawings}
           title="Remove every drawing"
-          className="rounded-md px-2 py-1 font-mono text-[11px] text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+          className="rounded-md px-1.5 py-1 font-mono text-[11px] text-white/60 transition-colors hover:bg-white/10 hover:text-white"
         >
           Clear
         </button>
         {tool && (
           <span className="px-1.5 font-mono text-[10px] text-white/35">
-            {tool === "trendline" ? "click two points" : "click a price"} · esc
+            {HINT[tool]} · esc
           </span>
         )}
       </div>
