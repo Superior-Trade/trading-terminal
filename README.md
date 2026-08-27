@@ -148,7 +148,7 @@ npm run dev                    # → http://localhost:3200
 
 | | Where |
 |---|---|
-| `SUPERIOR_TRADE_API_KEY` | [superior.trade](https://superior.trade) → Account → API keys |
+| `SUPERIOR_TRADE_API_KEY` | Sign up at [terminal.superior.trade](https://terminal.superior.trade) → Account → API keys |
 | `OPENROUTER_API_KEY` | [openrouter.ai/keys](https://openrouter.ai/keys) |
 
 No database to provision, no account to create, no login screen. An embedded Postgres
@@ -167,7 +167,8 @@ default.
 > chart yourself**, and indicator studies. To get those, request Advanced Charts at
 > [tradingview.com/advanced-charts](https://www.tradingview.com/advanced-charts/) (free,
 > a day or two) and run `npm run setup:charts`. The build tells you which chart it
-> picked. Full comparison: [docs/charting-library.md](docs/charting-library.md).
+> picked. The hosted build at [terminal.superior.trade](https://terminal.superior.trade)
+> already runs the full TradingView chart, drawings and all. Full comparison: [docs/charting-library.md](docs/charting-library.md).
 
 ## Money
 

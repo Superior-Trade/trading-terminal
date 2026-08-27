@@ -41,7 +41,7 @@ Two keys, nothing else:
 
 | Key | Where it comes from | Without it |
 |---|---|---|
-| `SUPERIOR_TRADE_API_KEY` | [superior.trade](https://superior.trade) → Account → API keys | No market data, no deployments |
+| `SUPERIOR_TRADE_API_KEY` | Sign up at [terminal.superior.trade](https://terminal.superior.trade) → Account → API keys | No market data, no deployments |
 | `OPENROUTER_API_KEY` | [openrouter.ai/keys](https://openrouter.ai/keys) | The agent panel cannot think |
 
 You cannot create these accounts yourself — **ask your human for both keys.** While you
@@ -94,7 +94,9 @@ You will see the **preview chart** (Lightweight Charts), not TradingView — tha
 expected on a fresh clone. Drawing on the chart and indicator studies need TradingView
 Advanced Charts, which a human must request (free) at
 [tradingview.com/advanced-charts](https://www.tradingview.com/advanced-charts/), then
-`npm run setup:charts`.
+`npm run setup:charts`. The hosted build at
+[terminal.superior.trade](https://terminal.superior.trade) already runs the full
+TradingView chart if you want it without the wait.
 
 ## Step 4 — verify what state you are in
 
