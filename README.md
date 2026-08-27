@@ -151,7 +151,7 @@ npm run dev                    # → http://localhost:3200
 | `SUPERIOR_TRADE_API_KEY` | Sign up at [terminal.superior.trade](https://terminal.superior.trade) → Account → API keys |
 | `OPENROUTER_API_KEY` | [openrouter.ai/keys](https://openrouter.ai/keys) |
 
-No database to provision, no account to create, no login screen. An embedded Postgres
+No database to provision, no login screen. An embedded Postgres
 writes to `./.data/` and migrates itself on first boot.
 
 `.env.example` documents 38 variables. Those two are the only ones without a working
