@@ -67,6 +67,45 @@ describe("hitDistance", () => {
     expect(hitDistance(g, 60, 35, 6)).not.toBeNull();
   });
 
+  test("polyline: nearest segment of a squiggle", () => {
+    const g: HitGeometry = {
+      kind: "polyline",
+      pts: [
+        { x: 0, y: 0 },
+        { x: 40, y: 30 },
+        { x: 80, y: 0 },
+        { x: 120, y: 30 },
+      ],
+    };
+    expect(hitDistance(g, 40, 25, 6)).toBeCloseTo(4); // just under the apex
+    expect(hitDistance(g, 80, 4, 6)).toBeCloseTo(3.2); // near the valley
+    expect(hitDistance(g, 60, 30, 6)).toBeNull(); // between the humps
+    // Off either end of the open polyline it clamps, not extends.
+    expect(hitDistance(g, 130, 40, 6)).toBeNull();
+  });
+
+  test("polyline: point within tolerance of an interior vertex", () => {
+    const g: HitGeometry = {
+      kind: "polyline",
+      pts: [
+        { x: 0, y: 0 },
+        { x: 50, y: 50 },
+        { x: 100, y: 0 },
+      ],
+    };
+    expect(hitDistance(g, 50, 53, 6)).toBeCloseTo(3);
+  });
+
+  test("polyline: degenerate one-point and empty strokes", () => {
+    expect(
+      hitDistance({ kind: "polyline", pts: [{ x: 10, y: 10 }] }, 13, 14, 6),
+    ).toBe(5);
+    expect(
+      hitDistance({ kind: "polyline", pts: [{ x: 10, y: 10 }] }, 20, 20, 6),
+    ).toBeNull();
+    expect(hitDistance({ kind: "polyline", pts: [] }, 0, 0, 6)).toBeNull();
+  });
+
   test("fib: nearest level within the x span", () => {
     const g: HitGeometry = { kind: "fib", xa: 0, xb: 100, ys: [10, 50, 90] };
     expect(hitDistance(g, 50, 53, 6)).toBe(3);

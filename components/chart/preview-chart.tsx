@@ -16,6 +16,7 @@ import {
   type UTCTimestamp,
 } from "lightweight-charts";
 import { TrendLinePrimitive } from "./trend-line-primitive";
+import { BrushPrimitive, simplifyIndices, MIN_SAMPLE_PX } from "./brush-primitive";
 import { RectanglePrimitive } from "./rectangle-primitive";
 import { VerticalLinePrimitive } from "./vertical-line-primitive";
 import { FibRetracementPrimitive, FIB_RATIOS } from "./fib-retracement-primitive";
@@ -38,16 +39,19 @@ import { pairToCoin } from "../../lib/hyperliquid-provider";
  * one to you individually and forbids redistribution, so a fresh clone would
  * otherwise not start until they had approved you.
  *
+ * The toolbar below covers the chat pencil's whole tool list — the freehand
+ * brush, trendlines, rays, horizontal levels, vertical lines, rectangles and
+ * fib retracements. A level is a native price line; everything else is an
+ * ISeriesPrimitive, so all of it is price/time-anchored and survives pan and
+ * zoom. Everything you draw lands in ChartContext.drawings with origin "user"
+ * and the TradingView kind names — the same structure the Advanced Charts
+ * path reports — so the agent reads your sketch either way. The brush works
+ * by taking pointer ownership while armed: a freehand drag IS a pan gesture,
+ * so handleScroll/handleScale are switched off for exactly as long as the
+ * brush is armed and restored on disarm.
+ *
  * WHAT THIS CANNOT DO, because Lightweight Charts has no concept of them:
- *   - the freehand brush and text notes. The toolbar below covers the rest of
- *     the chat pencil's tool list — trendlines, rays, horizontal levels,
- *     vertical lines, rectangles and fib retracements. A level is a native
- *     price line; everything else is an ISeriesPrimitive, so all of it is
- *     price/time-anchored and survives pan and zoom. Everything you draw
- *     lands in ChartContext.drawings with origin "user" and the TradingView
- *     kind names — the same structure the Advanced Charts path reports — so
- *     the agent reads your sketch either way. The brush would need drag
- *     capture that fights chart panning; it stays Advanced-only.
+ *   - text notes.
  *   - indicator studies. No study engine and no indicator UI.
  *   - the order-flow footprint overlay, which is drawn against Advanced
  *     Charts' pane geometry.
@@ -69,10 +73,11 @@ const USER_FILL = "rgba(251,191,36,0.12)";
 
 type Candle = { time: UTCTimestamp; open: number; high: number; low: number; close: number };
 
-type UserTool = "trendline" | "ray" | "level" | "vline" | "rect" | "fib";
+type UserTool = "brush" | "trendline" | "ray" | "level" | "vline" | "rect" | "fib";
 
 /** Toolbar tool → the TradingView kind name the drawing reports. */
 const KIND: Record<UserTool, string> = {
+  brush: "brush",
   trendline: "trend_line",
   ray: "ray",
   level: "horizontal_line",
@@ -84,6 +89,7 @@ const KIND: Record<UserTool, string> = {
 /** select_tool arrives with TradingView selectLineTool names; map the ones
  *  the preview can honour onto toolbar tools. */
 const TOOL_FOR_NAME: Record<string, UserTool> = {
+  brush: "brush",
   trend_line: "trendline",
   ray: "ray",
   horizontal_line: "level",
@@ -93,6 +99,7 @@ const TOOL_FOR_NAME: Record<string, UserTool> = {
 };
 
 const HINT: Record<UserTool, string> = {
+  brush: "drag to draw",
   trendline: "click two points",
   ray: "click two points",
   level: "click a price",
@@ -105,7 +112,7 @@ type TwoPointPrimitive =
   | TrendLinePrimitive
   | RectanglePrimitive
   | FibRetracementPrimitive;
-type PreviewPrimitive = TwoPointPrimitive | VerticalLinePrimitive;
+type PreviewPrimitive = TwoPointPrimitive | VerticalLinePrimitive | BrushPrimitive;
 
 interface Drawing {
   id: string;
@@ -123,6 +130,14 @@ interface Drawing {
 // Same visual language as the chat pencil's tool picker, redrawn small.
 
 type IconProps = { className?: string };
+
+function BrushIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className={className}>
+      <path d="M4 16c3-7 5 3 8-3s4-5 8-8" />
+    </svg>
+  );
+}
 
 function TrendIcon({ className }: IconProps) {
   return (
@@ -185,6 +200,7 @@ const TOOLBAR: Array<{
   name: string;
   Icon: (p: IconProps) => ReactElement;
 }> = [
+  { tool: "brush", name: "Brush", Icon: BrushIcon },
   { tool: "trendline", name: "Trendline", Icon: TrendIcon },
   { tool: "ray", name: "Ray", Icon: RayIcon },
   { tool: "level", name: "Horizontal level", Icon: HLineIcon },
@@ -248,6 +264,15 @@ export function PreviewChart({
   const pendingRef = useRef<{
     start: { time: UTCTimestamp; price: number };
     primitive: TwoPointPrimitive;
+  } | null>(null);
+  /** In-progress brush stroke (pointerdown→up). `px` mirrors `points` in pane
+   *  pixels for min-distance sampling and the finalize-time simplification;
+   *  `raw` counts every pointermove seen so the drop rate is knowable. */
+  const strokeRef = useRef<{
+    primitive: BrushPrimitive;
+    points: Array<{ time: number; price: number }>;
+    px: Array<{ x: number; y: number }>;
+    raw: number;
   } | null>(null);
   // ── selection state ──────────────────────────────────────────────────
   // Clicking near a drawing (no tool armed) selects it; x/y anchor the
@@ -409,6 +434,13 @@ export function PreviewChart({
       const x = ts.timeToCoordinate(d.points[0].time as UTCTimestamp);
       return x === null ? null : { kind: "vline", x: Number(x) };
     }
+    if (d.kind === "brush") {
+      // The primitive already resolves its fractional-time anchors to pane
+      // pixels every frame; hit-test the exact polyline it draws.
+      const pts =
+        d.primitive instanceof BrushPrimitive ? d.primitive.pixelPoints() : null;
+      return pts && pts.length >= 2 ? { kind: "polyline", pts } : null;
+    }
     if (d.points.length < 2) return null;
     const a = toPx(d.points[0]);
     const b = toPx(d.points[1]);
@@ -466,6 +498,10 @@ export function PreviewChart({
             x: (geom.xa + geom.xb) / 2,
             y: (Math.min(...geom.ys) + Math.max(...geom.ys)) / 2,
           });
+        case "polyline":
+          // Ride the stroke's middle vertex, not its bounding box — a curled
+          // stroke's box centre can sit nowhere near the ink.
+          return clamp(geom.pts[Math.floor(geom.pts.length / 2)]);
         default:
           return clamp({ x: (geom.x1 + geom.x2) / 2, y: (geom.y1 + geom.y2) / 2 });
       }
@@ -516,6 +552,10 @@ export function PreviewChart({
     const p = pendingRef.current;
     if (p && seriesRef.current) seriesRef.current.detachPrimitive(p.primitive);
     pendingRef.current = null;
+    // A half-drawn brush stroke cancels the same way (ESC mid-drag).
+    const st = strokeRef.current;
+    if (st && seriesRef.current) seriesRef.current.detachPrimitive(st.primitive);
+    strokeRef.current = null;
   }, []);
 
   const armTool = useCallback(
@@ -527,6 +567,151 @@ export function PreviewChart({
     },
     [cancelPending, selectDrawing],
   );
+
+  // ── the brush ────────────────────────────────────────────────────────
+  // A freehand drag IS a pan gesture, and both cannot own pointer movement.
+  // So while the brush is armed the chart's own pan/zoom is switched off and
+  // the container captures pointerdown→move→up itself. The effect CLEANUP
+  // re-enables handleScroll/handleScale on every way out of brush mode —
+  // toolbar re-click, ESC, select_tool cursor/other-tool, unmount — so the
+  // chart can never be left frozen.
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (tool !== "brush" || !chart) return;
+    chart.applyOptions({ handleScroll: false, handleScale: false });
+    return () => {
+      try {
+        chart.applyOptions({ handleScroll: true, handleScale: true });
+      } catch {
+        /* chart already disposed by the mount effect's cleanup */
+      }
+    };
+  }, [tool]);
+
+  // Brush capture. Subscribed once (reads the armed tool through toolRef);
+  // capture-phase listeners see the pointer before the library's own canvas
+  // handlers, and setPointerCapture keeps the stroke alive when the cursor
+  // leaves the pane mid-drag.
+  useEffect(() => {
+    const chart = chartRef.current;
+    const el = holder.current;
+    if (!chart || !el) return;
+    /** Bar interval (seconds) of the loaded candles — uniform, crypto. */
+    const candleInterval = (): number | null => {
+      const candles = candlesRef.current;
+      if (candles.length < 2) return null;
+      const dt = Number(candles[1].time) - Number(candles[0].time);
+      return dt > 0 ? dt : null;
+    };
+    /** Pane px → fractional (time, price). Brush samples land BETWEEN bars,
+     *  so anchor on the last candle's bar (always loaded) and offset linearly
+     *  by barSpacing — the exact inverse of BrushPrimitive.pixelPoints. */
+    const fractionalPoint = (
+      x: number,
+      y: number,
+    ): { time: number; price: number } | null => {
+      const s = seriesRef.current;
+      const interval = candleInterval();
+      if (!s || interval === null) return null;
+      const candles = candlesRef.current;
+      const ts = chart.timeScale();
+      const refT = Number(candles[candles.length - 1].time);
+      const refX = ts.timeToCoordinate(refT as UTCTimestamp);
+      const price = s.coordinateToPrice(y);
+      if (refX === null || price === null) return null;
+      const spacing = ts.options().barSpacing;
+      if (!(spacing > 0)) return null;
+      return {
+        time: refT + ((x - Number(refX)) / spacing) * interval,
+        price: Number(price),
+      };
+    };
+    const onPointerDown = (e: PointerEvent) => {
+      if (toolRef.current !== "brush" || e.button !== 0) return;
+      const rect = el.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const pane = chart.paneSize();
+      if (x < 0 || y < 0 || x > pane.width || y > pane.height) return; // axes
+      const s = seriesRef.current;
+      const interval = candleInterval();
+      const pt = fractionalPoint(x, y);
+      if (!s || interval === null || !pt) return;
+      const primitive = new BrushPrimitive(
+        [{ time: pt.time as UTCTimestamp, price: pt.price }],
+        USER,
+        interval,
+      );
+      s.attachPrimitive(primitive);
+      strokeRef.current = { primitive, points: [pt], px: [{ x, y }], raw: 1 };
+      try {
+        el.setPointerCapture(e.pointerId);
+      } catch {
+        /* capture is an optimization; the stroke works without it */
+      }
+      e.preventDefault();
+    };
+    const onPointerMove = (e: PointerEvent) => {
+      const st = strokeRef.current;
+      if (!st) return;
+      st.raw++;
+      const rect = el.getBoundingClientRect();
+      const pane = chart.paneSize();
+      const x = Math.min(Math.max(e.clientX - rect.left, 0), pane.width);
+      const y = Math.min(Math.max(e.clientY - rect.top, 0), pane.height);
+      const last = st.px[st.px.length - 1];
+      if (Math.hypot(x - last.x, y - last.y) < MIN_SAMPLE_PX) return;
+      const pt = fractionalPoint(x, y);
+      if (!pt) return;
+      st.px.push({ x, y });
+      st.points.push(pt);
+      st.primitive.addPoint({ time: pt.time as UTCTimestamp, price: pt.price });
+      e.preventDefault();
+    };
+    const finalize = () => {
+      const st = strokeRef.current;
+      if (!st) return;
+      strokeRef.current = null;
+      const s = seriesRef.current;
+      if (st.points.length < 2) {
+        // A click, not a drag — nothing worth keeping.
+        if (s) s.detachPrimitive(st.primitive);
+        return;
+      }
+      // Collinear wobble collapses; the kept indices filter time/price too.
+      const kept = simplifyIndices(st.px);
+      const points = kept.map((i) => st.points[i]);
+      console.debug(
+        `[preview-chart] brush: ${st.raw} pointer events → ${st.px.length} sampled → ${points.length} stored`,
+      );
+      st.primitive.setPoints(
+        points.map((p) => ({ time: p.time as UTCTimestamp, price: p.price })),
+      );
+      remember({
+        id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        kind: KIND.brush,
+        primitive: st.primitive,
+        points,
+        origin: "user",
+      });
+    };
+    const onPointerCancel = () => {
+      const st = strokeRef.current;
+      if (!st) return;
+      strokeRef.current = null;
+      if (seriesRef.current) seriesRef.current.detachPrimitive(st.primitive);
+    };
+    el.addEventListener("pointerdown", onPointerDown, true);
+    el.addEventListener("pointermove", onPointerMove, true);
+    el.addEventListener("pointerup", finalize, true);
+    el.addEventListener("pointercancel", onPointerCancel, true);
+    return () => {
+      el.removeEventListener("pointerdown", onPointerDown, true);
+      el.removeEventListener("pointermove", onPointerMove, true);
+      el.removeEventListener("pointerup", finalize, true);
+      el.removeEventListener("pointercancel", onPointerCancel, true);
+    };
+  }, [remember]);
 
   // Click-to-draw. Subscribed once; reads the armed tool through a ref so the
   // subscription survives re-renders. Points snap to the bar under the cursor,
@@ -571,6 +756,7 @@ export function PreviewChart({
     };
     const onClick = (e: MouseEvent) => {
       const mode = toolRef.current;
+      if (mode === "brush") return; // the brush draws on drag, never on click
       if (down && Math.abs(e.clientX - down.x) + Math.abs(e.clientY - down.y) >= 5)
         return; // that was a pan, not a placement (or a selection)
       const rect = el.getBoundingClientRect();
@@ -971,10 +1157,10 @@ export function PreviewChart({
         </button>
       )}
       <div className="absolute left-3 top-3 z-20 flex items-center gap-0.5 rounded-lg border border-white/10 bg-black/60 p-1 backdrop-blur">
-        {TOOLBAR.map(({ tool: t, name, Icon }, i) => (
+        {TOOLBAR.map(({ tool: t, name, Icon }) => (
           <span key={t} className="flex items-center gap-0.5">
             {/* lines | shapes */}
-            {i === 4 && <span className="mx-0.5 h-4 w-px bg-white/10" />}
+            {t === "rect" && <span className="mx-0.5 h-4 w-px bg-white/10" />}
             <button
               onClick={() => armTool(t)}
               title={`${name} — ${HINT[t]}`}

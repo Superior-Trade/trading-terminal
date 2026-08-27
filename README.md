@@ -164,9 +164,9 @@ default.
 > Apache-2.0, bundled, nothing to request.
 >
 > Everything works on it, including **drawing your read**: a small toolbar on the chart
-> draws trendlines, rays, horizontal levels, vertical lines, rectangles and fib
-> retracements, and the agent reads them the same way it reads TradingView drawings.
-> What the preview still lacks is the freehand brush, text notes and indicator
+> draws freehand brush strokes, trendlines, rays, horizontal levels, vertical lines,
+> rectangles and fib retracements, and the agent reads them the same way it reads
+> TradingView drawings. What the preview still lacks is text notes and indicator
 > studies. To get those, request Advanced Charts at
 > [tradingview.com/advanced-charts](https://www.tradingview.com/advanced-charts/) (free,
 > a day or two) and run `npm run setup:charts`. The build tells you which chart it

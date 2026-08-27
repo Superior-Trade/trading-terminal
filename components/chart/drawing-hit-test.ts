@@ -24,7 +24,9 @@ export type HitGeometry =
   /** A rectangle by opposite corners; inside counts as a hit. */
   | { kind: "rect"; x1: number; y1: number; x2: number; y2: number }
   /** Fib retracement: horizontal level lines spanning xa..xb at each y. */
-  | { kind: "fib"; xa: number; xb: number; ys: number[] };
+  | { kind: "fib"; xa: number; xb: number; ys: number[] }
+  /** An open polyline (freehand brush stroke) through the points in order. */
+  | { kind: "polyline"; pts: Array<{ x: number; y: number }> };
 
 /** Distance from point p to the segment (x1,y1)→(x2,y2). */
 export function distToSegment(
@@ -114,6 +116,25 @@ export function hitDistance(
       let best: number | null = null;
       for (const y of geom.ys) {
         const d = distToSegment(px, py, xa, y, xb, y);
+        if (d <= tolerance && (best === null || d < best)) best = d;
+      }
+      return best;
+    }
+    case "polyline": {
+      const pts = geom.pts;
+      if (pts.length === 0) return null;
+      if (pts.length === 1) {
+        // Degenerate stroke: a single sampled point.
+        const d = Math.hypot(px - pts[0].x, py - pts[0].y);
+        return d <= tolerance ? d : null;
+      }
+      let best: number | null = null;
+      for (let i = 1; i < pts.length; i++) {
+        const d = distToSegment(
+          px, py,
+          pts[i - 1].x, pts[i - 1].y,
+          pts[i].x, pts[i].y,
+        );
         if (d <= tolerance && (best === null || d < best)) best = d;
       }
       return best;

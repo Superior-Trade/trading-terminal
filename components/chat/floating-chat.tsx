@@ -340,8 +340,10 @@ function FibIcon({ className }: { className?: string }) {
 }
 
 /** Drawing tools offered by the chat-bar split button. ids are TradingView
- *  selectLineTool() names (passed through select_tool verbatim). */
-const ALL_DRAW_TOOLS = [
+ *  selectLineTool() names (passed through select_tool verbatim). Both charts
+ *  honour the whole list — the preview grew a freehand brush of its own (see
+ *  preview-chart.tsx), so nothing is filtered per build any more. */
+const DRAW_TOOLS = [
   { id: "brush", labelKey: "toolBrush", Icon: PencilIcon },
   { id: "trend_line", labelKey: "toolTrendline", Icon: LineIcon },
   { id: "horizontal_line", labelKey: "toolHLine", Icon: HLineIcon },
@@ -349,15 +351,11 @@ const ALL_DRAW_TOOLS = [
   { id: "rectangle", labelKey: "toolRect", Icon: RectIcon },
   { id: "fib_retracement", labelKey: "toolFib", Icon: FibIcon },
 ] as const;
-// The preview chart cannot honour the freehand brush (see preview-chart.tsx),
-// and it used to be the pencil's DEFAULT: first click armed a tool the chart
-// refused, the button lit up, and nothing drew. On preview builds the brush is
-// not offered at all and the pencil defaults to the trendline.
-const DRAW_TOOLS = ALL_DRAW_TOOLS.filter(
-  (t) => HAS_ADVANCED_CHARTS || t.id !== "brush",
-);
+// Advanced Charts keeps the historical brush-first default; the preview's
+// brush is drag-only pan-suppressing capture, so its pencil defaults to the
+// trendline and the brush stays one dropdown pick away.
 const DEFAULT_DRAW_TOOL: DrawTool = HAS_ADVANCED_CHARTS ? "brush" : "trend_line";
-type DrawTool = (typeof ALL_DRAW_TOOLS)[number]["id"];
+type DrawTool = (typeof DRAW_TOOLS)[number]["id"];
 const isDrawTool = (v: unknown): v is DrawTool =>
   DRAW_TOOLS.some((t) => t.id === v);
 

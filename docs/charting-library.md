@@ -16,7 +16,7 @@ backtest and deploy all work end to end. What it cannot do:
 
 | | Advanced Charts | Preview |
 |---|---|---|
-| **Drawing on the chart yourself** | full toolset incl. brush and text | trendlines, rays, levels, verticals, rectangles, fibs |
+| **Drawing on the chart yourself** | full toolset incl. text | brush, trendlines, rays, levels, verticals, rectangles, fibs |
 | Indicator studies | full library, configurable | none |
 | Agent levels, zones, trendlines, verticals, channels, fibs | yes | yes |
 | Entry/stop/target and position overlays | yes | yes |
@@ -26,10 +26,12 @@ backtest and deploy all work end to end. What it cannot do:
 | Candles, crosshair, live updates | yes | yes |
 
 The first row is the one that matters. "Draw where you think the market is going" is step
-one of the product, and the preview's on-chart toolbar covers it: trendlines, rays,
-horizontal levels, vertical lines, rectangles and fib retracements, all price/time-anchored
-primitives the agent reads exactly like TradingView drawings. What stays Advanced-only is
-the freehand brush, text notes and the study engine.
+one of the product, and the preview's on-chart toolbar covers it: a freehand brush,
+trendlines, rays, horizontal levels, vertical lines, rectangles and fib retracements, all
+price/time-anchored primitives the agent reads exactly like TradingView drawings. (While
+the brush is armed the chart's own pan/zoom pauses so the drag draws instead of panning;
+it resumes the moment the brush is disarmed.) What stays Advanced-only is text notes and
+the study engine.
 
 Actions the preview cannot perform return a truthful error rather than a silent success —
 pointing at Advanced Charts or the hosted terminal at

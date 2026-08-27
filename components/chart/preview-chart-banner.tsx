@@ -49,7 +49,7 @@ export function PreviewChartBanner() {
           </div>
           <p className="mt-1 text-[12.5px] leading-relaxed text-white/75">
             Running Lightweight Charts. The market, the agent&apos;s levels, the toolbar&apos;s
-            drawing tools, and every deploy work — but the brush, text notes and
+            drawing tools, and every deploy work — but text notes and
             indicator studies are off.{" "}
             <a
               href="https://www.tradingview.com/advanced-charts/"
