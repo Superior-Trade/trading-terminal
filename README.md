@@ -12,7 +12,7 @@ ones on the way.
 Run it yourself, or use the hosted build at
 [terminal.superior.trade](https://terminal.superior.trade).
 
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg?style=flat-square)](LICENSE) [![Node](https://img.shields.io/badge/node-%E2%89%A520.9-brightgreen.svg?style=flat-square)](https://nodejs.org) [![Next.js](https://img.shields.io/badge/Next.js-16-black.svg?style=flat-square)](https://nextjs.org)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg?style=flat-square)](LICENSE) [![Node](https://img.shields.io/badge/node-%E2%89%A520.9-brightgreen.svg?style=flat-square)](https://nodejs.org) [![Next.js](https://img.shields.io/badge/Next.js-16-black.svg?style=flat-square)](https://nextjs.org) [![Discord](https://img.shields.io/badge/Discord-join-5865F2.svg?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/aVZR8cCxcR)
 
 <img src="docs/media/terminal.png" alt="A path drawn on the chart, the agent scanning it, and a ranked setup returned with entry, stop and target" width="900">
 
@@ -21,6 +21,22 @@ Run it yourself, or use the hosted build at
 </div>
 
 ---
+
+> [!TIP]
+> **Have an agent instead of a mouse?** The terminal is for humans. If you want your
+> agent trading directly — no UI, no clone — hand it one line:
+> `Read https://superior.trade/SKILL.md and register.`
+> Works from Claude Code, OpenClaw, Codex and Cursor. Pointing a coding agent at this
+> repository instead? [AGENTS.md](AGENTS.md).
+
+## News
+
+- **2026-08-21** — A fresh clone now runs without TradingView: the bundled
+  [Lightweight Charts](https://github.com/tradingview/lightweight-charts) preview boots
+  first, Advanced Charts drops in later (`npm run setup:charts`).
+- **2026-08** — The validator's rule set and repair loop are written up in
+  [docs/strategy-pipeline.md](docs/strategy-pipeline.md). Every rule exists because a
+  strategy once reached production without it.
 
 ## The loop
 
@@ -204,3 +220,13 @@ What merges here also ships to the hosted build — it runs this repository.
 [Apache-2.0](LICENSE) © Superior Trade. TradingView's Advanced Charts is licensed
 separately by TradingView and is not included here — see [NOTICE](NOTICE) for that and
 the other third-party notices.
+
+---
+
+<div align="center">
+
+[![Star History Chart](https://api.star-history.com/svg?repos=Superior-Trade/trading-terminal&type=Date)](https://star-history.com/#Superior-Trade/trading-terminal&Date)
+
+<sub>If this repo is useful, a star helps other traders find it.</sub>
+
+</div>
