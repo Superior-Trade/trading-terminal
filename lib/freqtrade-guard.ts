@@ -60,23 +60,20 @@ export function fixTaLibFloatParams(code: string): string {
   );
 }
 
-/** Multi-output TA-Lib functions, outputs in the order the tuple returns them.
+/** Multi-output TA-Lib functions and their canonical NAMED outputs, in
+ *  declaration order.
  *
- *  Same failure shape as the float params above, and found the same way — from
- *  a live deployment. A funded HYPE bot ran for ten hours placing nothing while
- *  its entry condition fired seven times, because the model wrote:
- *
- *      bollinger = ta.BBANDS(dataframe['close'], timeperiod=20, ...)
- *      dataframe['bb_upper'] = bollinger['upperband']
- *
- *  ta.BBANDS returns a TUPLE, so the string subscript raises
- *  "TypeError: list indices must be integers or slices, not str" inside
- *  populate_indicators — on every candle, caught by freqtrade's strategy
- *  wrapper and logged as a warning. The deployment stays "running" and the
- *  wallet never trades.
- *
- *  The mistake is easy to make because qtpylib.bollinger_bands DOES return a
- *  dict-like. Prose won't fix that; the subscript is rewritten to its index. */
+ *  Strategies import `talib.abstract as ta` (the compile prompt mandates it),
+ *  and the abstract API returns multi-output results as a pandas DataFrame
+ *  whose columns carry these names — NOT a positional tuple. So
+ *  `bollinger['upperband']` is the correct form and `bollinger[0]` raises
+ *  `KeyError: 0` on the first candle (proven in a live e2e run: "Strategy
+ *  raised while computing indicators: KeyError: 0"). An earlier version of
+ *  this fixer rewrote the named form INTO the integer form, which both broke
+ *  every strategy it touched and made the compile→repair loop diverge — the
+ *  model re-emitted named subscripts, the fixer re-broke them. The mapping now
+ *  runs the safe direction: integer subscripts are rewritten to these names,
+ *  named subscripts are left alone. */
 const TALIB_MULTI_OUTPUT: Record<string, string[]> = {
   BBANDS: ["upperband", "middleband", "lowerband"],
   MACD: ["macd", "macdsignal", "macdhist"],
@@ -101,8 +98,8 @@ export function fixTaLibTupleSubscripts(code: string): string {
     "g",
   );
   for (const m of code.matchAll(assign)) {
-    // Tuple-unpacking assignments never match (the LHS has a comma), which is
-    // exactly right — those are already correct.
+    // Unpacking assignments never match (the LHS has a comma) — only a
+    // single-name holder can be subscripted, so only those are tracked.
     holders.set(m[1], TALIB_MULTI_OUTPUT[m[2]]);
   }
   if (holders.size === 0) return code;
@@ -111,8 +108,8 @@ export function fixTaLibTupleSubscripts(code: string): string {
   for (const [name, outputs] of holders) {
     for (const [i, key] of outputs.entries()) {
       out = out.replace(
-        new RegExp(`\\b${name}\\s*\\[\\s*(['"])${key}\\1\\s*\\]`, "g"),
-        `${name}[${i}]`,
+        new RegExp(`\\b${name}\\s*\\[\\s*${i}\\s*\\]`, "g"),
+        `${name}['${key}']`,
       );
     }
   }
@@ -123,21 +120,41 @@ export function validateStrategySafety({ config, code, leverage }: GuardInput): 
   const errors: string[] = [];
   const lev = Number.isFinite(leverage) && (leverage as number) >= 1 ? (leverage as number) : 1;
 
-  // Any string subscript still sitting on a multi-output TA-Lib result after
-  // the rewrite means an output name we do not recognise — a typo, or a
-  // qtpylib key on a talib call. It would raise on the first candle, so it is
-  // a hard error and goes back through the repair pass rather than deploying.
+  // Multi-output TA-Lib results (talib.abstract) subscript by the canonical
+  // output NAMES. Two leftover shapes still raise KeyError on the first
+  // candle after fixTaLibTupleSubscripts has run: an integer subscript the
+  // rewrite could not map (out of range, or a path that validates without the
+  // fixer — the agent's compile tool), and a named subscript that is not one
+  // of the function's outputs (a typo, or a qtpylib key on a talib call).
+  // Both are hard errors that go back through the repair pass rather than
+  // deploying a bot that never trades.
   {
     const fnNames = Object.keys(TALIB_MULTI_OUTPUT).join("|");
-    const holders = [
-      ...code.matchAll(new RegExp(`(\\w+)\\s*=\\s*(?:ta|talib)\\.(?:${fnNames})\\s*\\(`, "g")),
-    ].map((m) => m[1]);
-    for (const name of new Set(holders)) {
-      const leftover = code.match(new RegExp(`\\b${name}\\s*\\[\\s*['"]([^'"]+)['"]\\s*\\]`));
-      if (leftover) {
+    const holders = new Map<string, string[]>();
+    for (const m of code.matchAll(
+      new RegExp(`(\\w+)\\s*=\\s*(?:ta|talib)\\.(${fnNames})\\s*\\(`, "g"),
+    )) {
+      holders.set(m[1], TALIB_MULTI_OUTPUT[m[2]]);
+    }
+    for (const [name, outputs] of holders) {
+      const named = outputs.map((o) => `${name}['${o}']`).join(", ");
+      const intSub = code.match(new RegExp(`\\b${name}\\s*\\[\\s*(\\d+)\\s*\\]`));
+      if (intSub) {
         errors.push(
-          `${name} holds a TA-Lib tuple, so ${name}['${leftover[1]}'] raises "list indices must be integers or slices, not str" on the first candle. Unpack it — e.g. upper, middle, lower = ta.BBANDS(...) — or index it positionally.`,
+          `${name} holds a talib.abstract multi-output result — a DataFrame with NAMED columns, not a tuple — so ${name}[${intSub[1]}] raises "KeyError: ${intSub[1]}" on the first candle. Subscript by output name: ${named}.`,
         );
+      }
+      const keys = new Set(
+        [...code.matchAll(new RegExp(`\\b${name}\\s*\\[\\s*['"]([^'"]+)['"]\\s*\\]`, "g"))].map(
+          (m) => m[1],
+        ),
+      );
+      for (const key of keys) {
+        if (!outputs.includes(key)) {
+          errors.push(
+            `${name}['${key}'] is not one of this TA-Lib function's outputs — it raises "KeyError: '${key}'" on the first candle. The named columns are: ${named}.`,
+          );
+        }
       }
     }
   }
