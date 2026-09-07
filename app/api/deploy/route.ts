@@ -38,16 +38,18 @@ export async function POST(req: Request) {
     // makes freqtrade drop the market and idle a funded wallet.
     const bodyCfg = (body as { config?: Record<string, unknown> })?.config;
     if (bodyCfg) normalizeConfigPairs(bodyCfg);
-    // Hyperliquid's $10 minimum order value: a numeric stake below it can
-    // never fill, so the bot would spin doing nothing. ("unlimited" and
-    // missing stakes size off wallet balance — those pass through.)
+    // The deployable minimum is $11, not Hyperliquid's $10 order minimum:
+    // upstream reserves stake × 1.05 for fees/headroom and rejects anything
+    // under $11 ("increase to at least $11"), so a $10 stake passed a $10
+    // gate here and still failed upstream. ("unlimited" and missing stakes
+    // size off wallet balance — those pass through.)
     const stake = (body as { config?: { stake_amount?: unknown } })?.config
       ?.stake_amount;
-    if (typeof stake === "number" && stake < 10) {
+    if (typeof stake === "number" && stake < 11) {
       return NextResponse.json(
         {
           error:
-            "stake_amount below the $10 Hyperliquid minimum order value — raise the funding to at least 10 USDC",
+            "stake_amount below the $11 deploy minimum (Hyperliquid's $10 order value plus the upstream ×1.05 fee reserve) — raise the funding to at least 11 USDC",
         },
         { status: 400 },
       );

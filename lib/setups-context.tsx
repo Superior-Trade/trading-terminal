@@ -267,7 +267,7 @@ export function isFundingFailure(rawError: string): boolean {
   // mean an unfunded HL account.
   return (
     isServerFundingGuidance(rawError) ||
-    /not (?:have )?enough|doesn't hold enough|below the \$?10\b|minimum order|balance too low|raise the funding|no funds|not[ _]funded|no hyperliquid balance|deposit into it|user or api wallet/i.test(
+    /not (?:have )?enough|doesn't hold enough|below the \$?1[01]\b|minimum order|balance too low|raise the funding|no funds|not[ _]funded|no hyperliquid balance|deposit into it|user or api wallet/i.test(
       rawError,
     )
   );
@@ -357,7 +357,7 @@ export function SetupsProvider({ children }: { children: ReactNode }) {
         funds?: number;
         leverage?: number;
       };
-      if (Number.isFinite(j.funds) && j.funds! >= 10) setFundsState(j.funds!);
+      if (Number.isFinite(j.funds) && j.funds! >= 11) setFundsState(j.funds!);
       if (Number.isFinite(j.leverage) && j.leverage! >= 1)
         setLeverageState(j.leverage!);
     } catch {

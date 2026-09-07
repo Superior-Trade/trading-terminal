@@ -30,7 +30,7 @@ describe("sizing ceiling vs the API's funding buffer", () => {
     // margin × buffer test. phi's $100 is in here deliberately.
     for (const deployable of [10, 25, 50, 100, 105, 250, 1000, 5000, 12345.67]) {
       const stake = maxStakeFor(deployable);
-      if (stake === 10) continue; // floor case: the panel's own minimum
+      if (stake === 11) continue; // floor case: the panel's own minimum
       const needed = Math.ceil(stake * buffer * 100) / 100;
       expect(
         needed,
@@ -50,8 +50,11 @@ describe("sizing ceiling vs the API's funding buffer", () => {
     expect(maxStakeFor(100)).toBe(95);
   });
 
-  it("keeps the $10 floor rather than offering an unplaceable stake", () => {
-    expect(maxStakeFor(0)).toBe(10);
-    expect(maxStakeFor(5)).toBe(10);
+  it("keeps the $11 floor rather than offering an unplaceable stake", () => {
+    expect(maxStakeFor(0)).toBe(11);
+    expect(maxStakeFor(5)).toBe(11);
+    // The old $10 floor passed the local gate but upstream rejected it:
+    // stake × 1.05 pushes the requirement past $10 ("increase to at least $11").
+    expect(maxStakeFor(10)).toBe(11);
   });
 });

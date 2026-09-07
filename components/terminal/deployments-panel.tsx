@@ -2405,7 +2405,7 @@ function SizingControls({
         </div>
         <input
           type="range"
-          min={10}
+          min={11}
           max={maxFunds}
           step={maxFunds > 2000 ? 25 : 5}
           value={effFunds}
@@ -2421,7 +2421,7 @@ function SizingControls({
                   : `tradable $${maxFunds}`
           }
           className="cg-range w-full"
-          style={{ "--fill": fill(effFunds, 10, maxFunds) } as React.CSSProperties}
+          style={{ "--fill": fill(effFunds, 11, maxFunds) } as React.CSSProperties}
         />
       </div>
       <div className="space-y-2.5">

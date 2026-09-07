@@ -13,5 +13,8 @@
 export const SIZING_HAIRCUT = 0.95;
 
 export function maxStakeFor(deployableUsd: number): number {
-  return Math.max(10, Math.floor(deployableUsd * SIZING_HAIRCUT));
+  // The floor is the $11 deploy minimum (HL's $10 order value × the API's
+  // 1.05 reserve, rounded up) — offering less deploys a stake upstream
+  // rejects with "increase to at least $11".
+  return Math.max(11, Math.floor(deployableUsd * SIZING_HAIRCUT));
 }

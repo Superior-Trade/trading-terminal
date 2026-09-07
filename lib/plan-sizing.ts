@@ -44,8 +44,10 @@ export interface DerivedSizing {
 export const LIQ_BUFFER = 3;
 /** HL min order ≈ $10 notional; keep a little headroom. */
 const MIN_NOTIONAL = 12;
-/** Superior deploy minimum stake. */
-const MIN_STAKE = 10;
+/** Superior deploy minimum stake: HL's $10 order minimum plus the upstream
+ *  ×1.05 fee/reserve headroom — the API rejects a $10 stake with "increase
+ *  to at least $11". */
+const MIN_STAKE = 11;
 /** Absolute leverage ceiling when the pair's cap is unknown. */
 const DEFAULT_MAX_LEVERAGE = 25;
 
