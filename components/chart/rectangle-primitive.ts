@@ -8,6 +8,7 @@ import type {
 import {
   drawSelectionHandle,
   strokeSelectionGlow,
+  timeToXWithWhitespace,
   type TrendPoint,
 } from "./trend-line-primitive";
 
@@ -79,11 +80,10 @@ class RectanglePaneView implements IPrimitivePaneView {
       this._p2 = null;
       return;
     }
-    const timeScale = attached.chart.timeScale();
     const toPixel = (p: TrendPoint): Pixel | null => {
-      const x = timeScale.timeToCoordinate(p.time);
+      const x = timeToXWithWhitespace(attached, p.time);
       const y = attached.series.priceToCoordinate(p.price);
-      return x === null || y === null ? null : { x: Number(x), y: Number(y) };
+      return x === null || y === null ? null : { x, y: Number(y) };
     };
     this._p1 = toPixel(this._source.p1);
     this._p2 = toPixel(this._source.p2);

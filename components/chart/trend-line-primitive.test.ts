@@ -83,6 +83,35 @@ describe("TrendLinePrimitive", () => {
     expect(calls).toEqual([]); // no half-drawn line to a wrong place
   });
 
+  test("projects a forward-whitespace anchor via the uniform bar grid", () => {
+    // timeToCoordinate resolves only loaded bar times; an anchor right of
+    // the last bar resolves affinely off the last bar + barSpacing.
+    const prim = new TrendLinePrimitive(
+      { time: 100 as Time, price: 900 },
+      { time: 300 as Time, price: 500 }, // one interval past the last bar
+      "#fbbf24",
+    );
+    const param = {
+      chart: {
+        timeScale: () => ({
+          timeToCoordinate: (t: Time) =>
+            t === (100 as Time) ? 10 : t === (200 as Time) ? 50 : null,
+          options: () => ({ barSpacing: 40 }),
+        }),
+      },
+      series: {
+        priceToCoordinate: (p: number) => (1000 - p) / 10,
+        data: () => [{ time: 100 as Time }, { time: 200 as Time }],
+      },
+      requestUpdate: () => {},
+    } as unknown as SeriesAttachedParameter<Time>;
+    prim.attached?.(param);
+    const calls = renderToCalls(prim);
+    // x(300) = x(200) + ((300-200)/100 interval) × 40 barSpacing = 90 → ×2.
+    expect(calls).toContainEqual(["moveTo", 20, 20]);
+    expect(calls).toContainEqual(["lineTo", 180, 100]);
+  });
+
   test("as a ray, extends past the second anchor to the pane edge", () => {
     const prim = new TrendLinePrimitive(
       { time: 100 as Time, price: 900 },

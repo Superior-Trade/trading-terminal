@@ -63,17 +63,14 @@ export function fixTaLibFloatParams(code: string): string {
 /** Multi-output TA-Lib functions and their canonical NAMED outputs, in
  *  declaration order.
  *
- *  Strategies import `talib.abstract as ta` (the compile prompt mandates it),
- *  and the abstract API returns multi-output results as a pandas DataFrame
- *  whose columns carry these names — NOT a positional tuple. So
+ *  Strategies import `talib.abstract as ta` (the compile prompt mandates
+ *  it), and the abstract API returns multi-output results as a pandas
+ *  DataFrame whose columns carry these names — NOT a positional tuple. So
  *  `bollinger['upperband']` is the correct form and `bollinger[0]` raises
- *  `KeyError: 0` on the first candle (proven in a live e2e run: "Strategy
- *  raised while computing indicators: KeyError: 0"). An earlier version of
- *  this fixer rewrote the named form INTO the integer form, which both broke
- *  every strategy it touched and made the compile→repair loop diverge — the
- *  model re-emitted named subscripts, the fixer re-broke them. The mapping now
- *  runs the safe direction: integer subscripts are rewritten to these names,
- *  named subscripts are left alone. */
+ *  `KeyError: 0` on the first candle. Wrong subscripts are rejected as
+ *  validator hard errors (routed through the repair loop), never rewritten
+ *  in place: a regex rewrite cannot see scope, so it corrupts reassigned
+ *  holders and plain-`import talib` tuple code. */
 const TALIB_MULTI_OUTPUT: Record<string, string[]> = {
   BBANDS: ["upperband", "middleband", "lowerband"],
   MACD: ["macd", "macdsignal", "macdhist"],
@@ -90,30 +87,36 @@ const TALIB_MULTI_OUTPUT: Record<string, string[]> = {
   MINMAXINDEX: ["minidx", "maxidx"],
 };
 
-export function fixTaLibTupleSubscripts(code: string): string {
-  // Which local names hold the result of a multi-output TA-Lib call.
+/** Local names that hold a `ta.` (talib.abstract) multi-output result.
+ *
+ *  Deliberately narrow, because a false positive here becomes a spurious
+ *  hard error:
+ *  - only `ta.` calls count — plain `import talib` returns real tuples,
+ *    where integer subscripts are correct;
+ *  - the LHS is anchored at the start of the statement, so a
+ *    tuple-unpacking target (`upper, mid, lower = ta.BBANDS(...)`) never
+ *    registers its last name as a holder;
+ *  - a name later reassigned from any non-TA-Lib RHS is dropped — its
+ *    subscripts can no longer be judged from here. */
+function taLibMultiOutputHolders(code: string): Map<string, string[]> {
+  const fnNames = Object.keys(TALIB_MULTI_OUTPUT).join("|");
   const holders = new Map<string, string[]>();
-  const assign = new RegExp(
-    `(\\w+)\\s*=\\s*(?:ta|talib)\\.(${Object.keys(TALIB_MULTI_OUTPUT).join("|")})\\s*\\(`,
-    "g",
-  );
-  for (const m of code.matchAll(assign)) {
-    // Unpacking assignments never match (the LHS has a comma) — only a
-    // single-name holder can be subscripted, so only those are tracked.
+  for (const m of code.matchAll(
+    new RegExp(`^[ \\t]*(\\w+)\\s*=\\s*ta\\.(${fnNames})\\s*\\(`, "gm"),
+  )) {
     holders.set(m[1], TALIB_MULTI_OUTPUT[m[2]]);
   }
-  if (holders.size === 0) return code;
-
-  let out = code;
-  for (const [name, outputs] of holders) {
-    for (const [i, key] of outputs.entries()) {
-      out = out.replace(
-        new RegExp(`\\b${name}\\s*\\[\\s*${i}\\s*\\]`, "g"),
-        `${name}['${key}']`,
-      );
+  for (const name of [...holders.keys()]) {
+    for (const m of code.matchAll(
+      new RegExp(`^[ \\t]*${name}\\s*=\\s*(.+)$`, "gm"),
+    )) {
+      if (!new RegExp(`^ta\\.(?:${fnNames})\\s*\\(`).test(m[1].trim())) {
+        holders.delete(name);
+        break;
+      }
     }
   }
-  return out;
+  return holders;
 }
 
 export function validateStrategySafety({ config, code, leverage }: GuardInput): string[] {
@@ -121,21 +124,14 @@ export function validateStrategySafety({ config, code, leverage }: GuardInput): 
   const lev = Number.isFinite(leverage) && (leverage as number) >= 1 ? (leverage as number) : 1;
 
   // Multi-output TA-Lib results (talib.abstract) subscript by the canonical
-  // output NAMES. Two leftover shapes still raise KeyError on the first
-  // candle after fixTaLibTupleSubscripts has run: an integer subscript the
-  // rewrite could not map (out of range, or a path that validates without the
-  // fixer — the agent's compile tool), and a named subscript that is not one
-  // of the function's outputs (a typo, or a qtpylib key on a talib call).
-  // Both are hard errors that go back through the repair pass rather than
-  // deploying a bot that never trades.
+  // output NAMES. Two shapes raise KeyError on the first candle: an integer
+  // subscript (the tuple form on what is actually a DataFrame), and a named
+  // subscript that is not one of the function's outputs (a typo, or a
+  // qtpylib key on a talib call). Both are hard errors that go back through
+  // the repair pass rather than deploying a bot that never trades — the
+  // repair loop converges on these (the model re-emits the named form).
   {
-    const fnNames = Object.keys(TALIB_MULTI_OUTPUT).join("|");
-    const holders = new Map<string, string[]>();
-    for (const m of code.matchAll(
-      new RegExp(`(\\w+)\\s*=\\s*(?:ta|talib)\\.(${fnNames})\\s*\\(`, "g"),
-    )) {
-      holders.set(m[1], TALIB_MULTI_OUTPUT[m[2]]);
-    }
+    const holders = taLibMultiOutputHolders(code);
     for (const [name, outputs] of holders) {
       const named = outputs.map((o) => `${name}['${o}']`).join(", ");
       const intSub = code.match(new RegExp(`\\b${name}\\s*\\[\\s*(\\d+)\\s*\\]`));

@@ -72,6 +72,36 @@ export function strokeSelectionGlow(
   ctx.restore();
 }
 
+/**
+ * time → pane x, resolving off-grid and forward-whitespace times too.
+ *
+ * `timeToCoordinate` resolves only loaded bar times, so an anchor placed
+ * between bars or in the whitespace right of the last bar (a projected
+ * trendline/rectangle/fib) returns null there. The preview's candles are a
+ * uniform grid (crypto, no session gaps), which makes time↔x affine: anchor
+ * on the last loaded bar and offset linearly by barSpacing — the same trick
+ * BrushPrimitive.pixelPoints uses. Shared by every preview primitive that
+ * anchors on time.
+ */
+export function timeToXWithWhitespace(
+  attached: SeriesAttachedParameter<Time>,
+  time: Time,
+): number | null {
+  const timeScale = attached.chart.timeScale();
+  const direct = timeScale.timeToCoordinate(time);
+  if (direct !== null) return Number(direct);
+  const data = attached.series.data?.() ?? [];
+  if (data.length < 2) return null;
+  const interval = Number(data[1].time) - Number(data[0].time);
+  if (!(interval > 0)) return null;
+  const last = data[data.length - 1].time;
+  const refX = timeScale.timeToCoordinate(last);
+  if (refX === null) return null;
+  const spacing = timeScale.options().barSpacing;
+  if (!(spacing > 0)) return null;
+  return Number(refX) + ((Number(time) - Number(last)) / interval) * spacing;
+}
+
 /** Pushes (x2,y2) along the p1→p2 direction until it hits a pane edge. */
 function extendToEdge(
   x1: number,
@@ -157,14 +187,13 @@ class TrendLinePaneView implements IPrimitivePaneView {
       this._p2 = null;
       return;
     }
-    const timeScale = attached.chart.timeScale();
     const toPixel = (p: TrendPoint): Pixel | null => {
-      // Both converters return null off-range (e.g. an anchor panned out of
-      // the loaded data); the renderer then skips the frame rather than
-      // drawing a line to a wrong place.
-      const x = timeScale.timeToCoordinate(p.time);
+      // Both converters return null when unresolvable (e.g. an anchor
+      // panned out of the loaded data); the renderer then skips the frame
+      // rather than drawing a line to a wrong place.
+      const x = timeToXWithWhitespace(attached, p.time);
       const y = attached.series.priceToCoordinate(p.price);
-      return x === null || y === null ? null : { x: Number(x), y: Number(y) };
+      return x === null || y === null ? null : { x, y: Number(y) };
     };
     this._p1 = toPixel(this._source.p1);
     this._p2 = toPixel(this._source.p2);

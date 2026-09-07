@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  nearestBarTime,
   parseHlCandles,
   parseLighterCandles,
   lighterMarketKeyCandidates,
@@ -76,5 +77,23 @@ describe("pickLighterMarketId", () => {
   test("tolerates malformed payloads", () => {
     expect(pickLighterMarketId(null, "BTC")).toBeNull();
     expect(pickLighterMarketId({ order_book_details: "x" }, "BTC")).toBeNull();
+  });
+});
+
+describe("nearestBarTime", () => {
+  const candles = [{ time: 100 }, { time: 200 }, { time: 300 }];
+
+  test("snaps an off-grid timestamp to the nearest bar", () => {
+    // The old in-place loop initialized best-distance at the target itself
+    // (distance 0), so nothing ever beat it and the snap was a no-op —
+    // off-grid verticals resolved to no coordinate and rendered nothing.
+    expect(nearestBarTime(candles, 160)).toBe(200);
+    expect(nearestBarTime(candles, 149)).toBe(100);
+    expect(nearestBarTime(candles, 10_000)).toBe(300);
+    expect(nearestBarTime(candles, 200)).toBe(200);
+  });
+
+  test("returns null with no bars loaded", () => {
+    expect(nearestBarTime([], 160)).toBeNull();
   });
 });

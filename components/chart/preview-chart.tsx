@@ -31,7 +31,7 @@ import {
   type ChartActionResult,
   type ChartContext,
 } from "../../lib/chart-bridge";
-import { fetchPreviewCandles } from "./preview-market-data";
+import { fetchPreviewCandles, nearestBarTime } from "./preview-market-data";
 import {
   useHyperliquid,
   pairToCoin,
@@ -510,6 +510,77 @@ export function PreviewChart({
     setSelected(null);
   }, [unrender]);
 
+  /** Drops any half-placed two-point shape or in-progress brush stroke. */
+  const cancelPending = useCallback(() => {
+    const p = pendingRef.current;
+    if (p && seriesRef.current) seriesRef.current.detachPrimitive(p.primitive);
+    pendingRef.current = null;
+    const st = strokeRef.current;
+    if (st && seriesRef.current) seriesRef.current.detachPrimitive(st.primitive);
+    strokeRef.current = null;
+  }, []);
+
+  // ── fractional time↔pixel mapping ────────────────────────────────────
+  // The preview's candles are a uniform grid (crypto, no session gaps), so
+  // time↔x is affine: anchor on the last candle's bar (always loaded) and
+  // offset linearly by barSpacing. This is what lets brush samples and
+  // two-point anchors land BETWEEN bars and in the whitespace right of the
+  // last bar — the exact counterpart of the primitives'
+  // timeToXWithWhitespace / BrushPrimitive.pixelPoints.
+
+  /** Bar interval (seconds) of the loaded candles — uniform, crypto. */
+  const candleInterval = useCallback((): number | null => {
+    const candles = candlesRef.current;
+    if (candles.length < 2) return null;
+    const dt = Number(candles[1].time) - Number(candles[0].time);
+    return dt > 0 ? dt : null;
+  }, []);
+
+  /** Pane px → fractional (time, price). */
+  const fractionalPoint = useCallback(
+    (x: number, y: number): { time: number; price: number } | null => {
+      const chart = chartRef.current;
+      const s = seriesRef.current;
+      const interval = candleInterval();
+      if (!chart || !s || interval === null) return null;
+      const candles = candlesRef.current;
+      const ts = chart.timeScale();
+      const refT = Number(candles[candles.length - 1].time);
+      const refX = ts.timeToCoordinate(refT as UTCTimestamp);
+      const price = s.coordinateToPrice(y);
+      if (refX === null || price === null) return null;
+      const spacing = ts.options().barSpacing;
+      if (!(spacing > 0)) return null;
+      return {
+        time: refT + ((x - Number(refX)) / spacing) * interval,
+        price: Number(price),
+      };
+    },
+    [candleInterval],
+  );
+
+  /** time → pane x, resolving off-grid/whitespace times (inverse of the
+   *  above); null when nothing is loaded. */
+  const timeToX = useCallback(
+    (time: number): number | null => {
+      const chart = chartRef.current;
+      if (!chart) return null;
+      const ts = chart.timeScale();
+      const direct = ts.timeToCoordinate(time as UTCTimestamp);
+      if (direct !== null) return Number(direct);
+      const interval = candleInterval();
+      if (interval === null) return null;
+      const candles = candlesRef.current;
+      const refT = Number(candles[candles.length - 1].time);
+      const refX = ts.timeToCoordinate(refT as UTCTimestamp);
+      if (refX === null) return null;
+      const spacing = ts.options().barSpacing;
+      if (!(spacing > 0)) return null;
+      return Number(refX) + ((time - refT) / interval) * spacing;
+    },
+    [candleInterval],
+  );
+
   // ── selection ────────────────────────────────────────────────────────
   /** The drawing's current pane-pixel geometry, or null when unresolvable
    *  (chart gone, anchors off the loaded range, or no stored points). */
@@ -517,11 +588,10 @@ export function PreviewChart({
     const chart = chartRef.current;
     const s = seriesRef.current;
     if (!chart || !s || d.points.length === 0) return null;
-    const ts = chart.timeScale();
     const toPx = (p: { time: number; price: number }) => {
-      const x = ts.timeToCoordinate(p.time as UTCTimestamp);
+      const x = timeToX(p.time);
       const y = s.priceToCoordinate(p.price);
-      return x === null || y === null ? null : { x: Number(x), y: Number(y) };
+      return x === null || y === null ? null : { x, y: Number(y) };
     };
     // Price-line-backed drawings (levels, zone boundaries) are horizontal
     // lines at their stored prices, at any x.
@@ -535,8 +605,8 @@ export function PreviewChart({
       return { kind: "fib", xa: 0, xb: chart.paneSize().width, ys };
     }
     if (d.kind === "vertical_line") {
-      const x = ts.timeToCoordinate(d.points[0].time as UTCTimestamp);
-      return x === null ? null : { kind: "vline", x: Number(x) };
+      const x = timeToX(d.points[0].time);
+      return x === null ? null : { kind: "vline", x };
     }
     if (d.kind === "brush") {
       // The primitive already resolves its fractional-time anchors to pane
@@ -568,7 +638,7 @@ export function PreviewChart({
         // trend_line — the user's primitive or the agent's two-point series.
         return { kind: "segment", x1: a.x, y1: a.y, x2: b.x, y2: b.y };
     }
-  }, []);
+  }, [timeToX]);
 
   /** Nearest drawing within tolerance of a pane-pixel point. */
   const hitAt = useCallback(
@@ -664,8 +734,11 @@ export function PreviewChart({
     prevSymbolRef.current = symbol;
     const chart = chartRef.current;
     const s = seriesRef.current;
-    // Deselect first so captured line widths are the unselected ones.
+    // Deselect first so captured line widths are the unselected ones, and
+    // detach any half-placed anchor or in-flight stroke — a pending
+    // placement must not complete on another market's chart.
     selectDrawing(null);
+    cancelPending();
     const outgoing: StashedDrawing[] = drawings.current.map((d) => {
       const entry: StashedDrawing = { d };
       if (d.line) entry.lineOpts = { ...d.line.options() };
@@ -705,19 +778,9 @@ export function PreviewChart({
       if (d.primitive) s.attachPrimitive(d.primitive);
       drawings.current.push(d);
     }
-  }, [symbol, unrender, selectDrawing]);
+  }, [symbol, unrender, selectDrawing, cancelPending]);
 
   // ── user drawing (the toolbar) ───────────────────────────────────────
-  const cancelPending = useCallback(() => {
-    const p = pendingRef.current;
-    if (p && seriesRef.current) seriesRef.current.detachPrimitive(p.primitive);
-    pendingRef.current = null;
-    // A half-drawn brush stroke cancels the same way (ESC mid-drag).
-    const st = strokeRef.current;
-    if (st && seriesRef.current) seriesRef.current.detachPrimitive(st.primitive);
-    strokeRef.current = null;
-  }, []);
-
   const armTool = useCallback(
     (next: UserTool | null) => {
       cancelPending();
@@ -756,36 +819,6 @@ export function PreviewChart({
     const chart = chartRef.current;
     const el = holder.current;
     if (!chart || !el) return;
-    /** Bar interval (seconds) of the loaded candles — uniform, crypto. */
-    const candleInterval = (): number | null => {
-      const candles = candlesRef.current;
-      if (candles.length < 2) return null;
-      const dt = Number(candles[1].time) - Number(candles[0].time);
-      return dt > 0 ? dt : null;
-    };
-    /** Pane px → fractional (time, price). Brush samples land BETWEEN bars,
-     *  so anchor on the last candle's bar (always loaded) and offset linearly
-     *  by barSpacing — the exact inverse of BrushPrimitive.pixelPoints. */
-    const fractionalPoint = (
-      x: number,
-      y: number,
-    ): { time: number; price: number } | null => {
-      const s = seriesRef.current;
-      const interval = candleInterval();
-      if (!s || interval === null) return null;
-      const candles = candlesRef.current;
-      const ts = chart.timeScale();
-      const refT = Number(candles[candles.length - 1].time);
-      const refX = ts.timeToCoordinate(refT as UTCTimestamp);
-      const price = s.coordinateToPrice(y);
-      if (refX === null || price === null) return null;
-      const spacing = ts.options().barSpacing;
-      if (!(spacing > 0)) return null;
-      return {
-        time: refT + ((x - Number(refX)) / spacing) * interval,
-        price: Number(price),
-      };
-    };
     const onPointerDown = (e: PointerEvent) => {
       if (toolRef.current !== "brush" || e.button !== 0) return;
       const rect = el.getBoundingClientRect();
@@ -871,7 +904,7 @@ export function PreviewChart({
       el.removeEventListener("pointerup", finalize, true);
       el.removeEventListener("pointercancel", onPointerCancel, true);
     };
-  }, [remember]);
+  }, [remember, candleInterval, fractionalPoint]);
 
   // Click-to-draw. Subscribed once; reads the armed tool through a ref so the
   // subscription survives re-renders. Points snap to the bar under the cursor,
@@ -897,8 +930,13 @@ export function PreviewChart({
       if (x < 0 || y < 0 || x > pane.width || y > pane.height) return null; // axis areas
       const t = chart.timeScale().coordinateToTime(x);
       const price = s.coordinateToPrice(y);
-      if (typeof t !== "number" || price === null) return null;
-      return { time: t as UTCTimestamp, price: Number(price) };
+      if (price === null) return null;
+      if (typeof t === "number") return { time: t as UTCTimestamp, price: Number(price) };
+      // coordinateToTime is null right of the last bar — resolve forward-
+      // whitespace anchors fractionally (the brush's trick) so a trendline/
+      // ray/rect/fib can project past the current candle.
+      const fp = fractionalPoint(x, y);
+      return fp ? { time: fp.time as UTCTimestamp, price: fp.price } : null;
     };
     const resolve = (
       param: MouseEventParams,
@@ -907,8 +945,12 @@ export function PreviewChart({
       if (!s || !param.point) return null;
       const t = param.time ?? chart.timeScale().coordinateToTime(param.point.x);
       const price = s.coordinateToPrice(param.point.y);
-      if (typeof t !== "number" || price === null) return null;
-      return { time: t as UTCTimestamp, price: Number(price) };
+      if (price === null) return null;
+      if (typeof t === "number") return { time: t as UTCTimestamp, price: Number(price) };
+      // Same whitespace fallback, so the live preview follows the cursor
+      // past the last bar instead of freezing at it.
+      const fp = fractionalPoint(param.point.x, param.point.y);
+      return fp ? { time: fp.time as UTCTimestamp, price: fp.price } : null;
     };
     let down: { x: number; y: number } | null = null;
     const onDown = (e: MouseEvent) => {
@@ -1032,7 +1074,7 @@ export function PreviewChart({
         /* chart already disposed by the mount effect's cleanup */
       }
     };
-  }, [priceLine, remember, hitAt, selectDrawing, badgePosFor]);
+  }, [priceLine, remember, hitAt, selectDrawing, badgePosFor, fractionalPoint]);
 
   // ESC drops the armed tool (and any half-placed two-point shape).
   useEffect(() => {
@@ -1219,13 +1261,12 @@ export function PreviewChart({
             const s = seriesRef.current;
             if (!s) return { ok: false, error: "chart not ready" };
             // Snap to the nearest bar: timeToCoordinate resolves bar times,
-            // not arbitrary timestamps between them.
-            const candles = candlesRef.current;
-            let t = action.time as UTCTimestamp;
-            for (const c of candles) {
-              if (Math.abs(Number(c.time) - action.time) < Math.abs(Number(t) - action.time))
-                t = c.time;
-            }
+            // not arbitrary timestamps between them. No bars → refuse rather
+            // than store a drawing that can never render.
+            const snapped = nearestBarTime(candlesRef.current, action.time);
+            if (snapped === null)
+              return { ok: false, error: "no candles loaded yet" };
+            const t = snapped as UTCTimestamp;
             const primitive = new VerticalLinePrimitive(t, "#a3e635", action.label);
             s.attachPrimitive(primitive);
             remember({

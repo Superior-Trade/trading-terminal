@@ -2,6 +2,7 @@ import path from "path";
 import { existsSync } from "fs";
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
+import { envFlagEnabled } from "./lib/env-flags";
 
 // TradingView's Advanced Charts cannot be redistributed, so a fresh clone does
 // not have it. Rather than fail the build, detect it here and let the app fall
@@ -10,7 +11,7 @@ import { withSentryConfig } from "@sentry/nextjs";
 // the import path is aliased to a stub so the bundler still resolves it.
 const CHARTS_DIR = path.join(process.cwd(), "public", "static", "charting_library");
 const HAS_ADVANCED_CHARTS =
-  !process.env.FORCE_PREVIEW_CHART &&
+  !envFlagEnabled(process.env.FORCE_PREVIEW_CHART) &&
   existsSync(path.join(CHARTS_DIR, "charting_library.js"));
 
 // Error monitoring is opt-in. Without SENTRY_ORG + SENTRY_PROJECT the config

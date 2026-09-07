@@ -16,7 +16,13 @@ import { useAccountValue, type WalletValue } from "../../lib/use-account-value";
 import { useHeldUsdc } from "../../lib/use-held-usdc";
 import { parseLevelSource, trendlineValueAt } from "../../lib/indicators";
 import { orderSetupsNewestFirst } from "../../lib/setup-order";
-import { maxStakeFor } from "../../lib/sizing-ceiling";
+import {
+  COMMITTED_DEPLOY_STATES,
+  MIN_STAKE_USD,
+  deployableFundsUsd,
+  maxStakeFor,
+  type DeployableWalletFunds,
+} from "../../lib/sizing-ceiling";
 import { useLiveLevels, type LiveLevels } from "../../lib/use-live-levels";
 import { fixedSizing } from "../../lib/plan-sizing";
 import { PnlShareCard } from "./pnl-share-card";
@@ -111,22 +117,20 @@ interface StoredRecord {
   createdAt: number;
 }
 
-const ACTIVE_STATES = ["running", "deployed", "pending"];
+const ACTIVE_STATES = COMMITTED_DEPLOY_STATES;
 
 /** Capital already committed to live strategies, keyed by lowercased wallet.
  *  A wallet maps to `null` when a live strategy on it has no readable stake —
  *  the whole wallet is then treated as spoken for rather than guessed at. */
 export type CommittedByWallet = Map<string, number | null>;
 
-/** Deployable funds = Σ over trading wallets of (withdrawable − committed).
- *
- *  Committed, NOT occupied. Both earlier versions were wrong in opposite
- *  directions: counting a wallet's full balance regardless of live strategies
- *  offered the same money twice, and zeroing any wallet holding a live strategy
- *  collapsed a $200 account running a $12 strategy to the $10 floor. The main
- *  account hosts several strategies against one balance, so for FUNDS the
- *  question is how much is spoken for — occupancy stays a yes/no only for
- *  placement.
+/** Deployable funds: withdrawable net of committed per wallet, plus main's
+ *  held USDC — the arithmetic lives in lib/sizing-ceiling's
+ *  deployableFundsUsd, which the server's deploy pre-flight uses too, so
+ *  the ceiling offered here and the stake the pre-flight accepts can never
+ *  disagree. Committed, NOT occupied: the main account hosts several
+ *  strategies against one balance, so for FUNDS the question is how much is
+ *  spoken for — occupancy stays a yes/no only for placement.
  *
  *  Shared by the sizing slider ceiling and the restart-affordability guard.
  *  null while balances are still loading. */
@@ -134,26 +138,35 @@ function computeDeployable(
   perWallet: WalletValue[],
   fallbackWithdrawable: number | null,
   committed: CommittedByWallet | null,
+  mainHeldUsd = 0,
 ): number | null {
   const main = perWallet.find((w) => w.accountIndex === 1);
   const mainW = main?.withdrawable ?? fallbackWithdrawable;
   if (mainW === null) return null;
   // Commitments still loading: publish the main balance alone rather than an
   // idle pool we cannot yet net down.
-  if (committed === null) return mainW;
+  if (committed === null) return mainW + mainHeldUsd;
 
-  const free = (wallet: string | undefined, withdrawable: number) => {
-    if (!wallet) return withdrawable; // fallback balance, no address to key on
-    const used = committed.get(wallet.toLowerCase());
-    if (used === undefined) return withdrawable; // nothing live on this wallet
-    if (used === null) return 0; // live strategy with an unreadable stake
-    return Math.max(0, withdrawable - used);
-  };
+  // No address to key on (fallback balance) → nothing attributable, $0.
+  const committedOf = (wallet: string | undefined) =>
+    wallet ? committed.get(wallet.toLowerCase()) : undefined;
 
-  const idle = perWallet
-    .filter((w) => w.accountIndex !== 1 && w.withdrawable !== null)
-    .reduce((s, w) => s + free(w.wallet, w.withdrawable as number), 0);
-  return free(main?.wallet, mainW) + idle;
+  const rows: DeployableWalletFunds[] = [
+    {
+      withdrawableUsd: mainW,
+      heldUsd: mainHeldUsd,
+      isMain: true,
+      committedUsd: committedOf(main?.wallet),
+    },
+    ...perWallet
+      .filter((w) => w.accountIndex !== 1 && w.withdrawable !== null)
+      .map((w) => ({
+        withdrawableUsd: w.withdrawable,
+        isMain: false,
+        committedUsd: committedOf(w.wallet),
+      })),
+  ];
+  return deployableFundsUsd(rows);
 }
 
 /** Deployable funds for the sizing slider + restart guard: venue deployable
@@ -178,10 +191,8 @@ function useDeployableUsd(
     mainWallet ? [mainWallet] : [],
     authed,
   );
-  const venue = computeDeployable(perWallet, withdrawable, committed);
-  if (venue === null) return null;
   if (mainWallet && heldStatus === "loading") return null;
-  return venue + (held ?? 0);
+  return computeDeployable(perWallet, withdrawable, committed, held ?? 0);
 }
 
 /* ── Native bracket orders (Superior /v2/bracket) ─────────────────────── */
@@ -2352,7 +2363,12 @@ function SizingControls({
   // balance is still loading the slider is LOCKED (no guessing a $1,000 cap
   // the user may not have); logged out keeps a nominal $1,000 range.
   const balanceLoading = authed && deployable === null;
-  const maxFunds = deployable !== null ? maxStakeFor(deployable) : 1000;
+  const maxStake = deployable !== null ? maxStakeFor(deployable) : null;
+  // Settled balance below the minimum deployable: every stake the slider
+  // could offer would fail the funding pre-flight, so show a deposit prompt
+  // instead of a doomed $11 slider.
+  const underfunded = authed && deployable !== null && maxStake === null;
+  const maxFunds = maxStake ?? 1000;
   const effFunds = Math.min(funds, maxFunds);
   const effLev = Math.min(leverage, maxLev);
 
@@ -2373,8 +2389,8 @@ function SizingControls({
   // then, and clamping against a placeholder would write a number the user
   // never chose.
   useEffect(() => {
-    if (!balanceLoading && funds > maxFunds) setFunds(maxFunds);
-  }, [balanceLoading, funds, maxFunds, setFunds]);
+    if (!balanceLoading && !underfunded && funds > maxFunds) setFunds(maxFunds);
+  }, [balanceLoading, underfunded, funds, maxFunds, setFunds]);
 
   const fill = (v: number, min: number, max: number) =>
     `${max <= min ? 0 : ((v - min) / (max - min)) * 100}%`;
@@ -2393,36 +2409,44 @@ function SizingControls({
           <span className="font-mono text-[12px] font-bold tabular-nums text-white">
             {balanceLoading
               ? "…"
-              : hidden
-                ? `${fundsPct}%`
-                : `$${effFunds.toLocaleString("en-US")}`}
-            {!balanceLoading && (
+              : underfunded
+                ? "—"
+                : hidden
+                  ? `${fundsPct}%`
+                  : `$${effFunds.toLocaleString("en-US")}`}
+            {!balanceLoading && !underfunded && (
               <span className="ml-1 text-white/35">
                 {hidden ? "/ 100%" : `/ $${maxFunds.toLocaleString("en-US")}`}
               </span>
             )}
           </span>
         </div>
-        <input
-          type="range"
-          min={11}
-          max={maxFunds}
-          step={maxFunds > 2000 ? 25 : 5}
-          value={effFunds}
-          onChange={(e) => setFunds(Number(e.target.value))}
-          disabled={balanceLoading || deployBusy}
-          title={
-            deployBusy
-              ? t("deployBusyElsewhere")
-              : balanceLoading
-                ? t("balanceLoading")
-                : hidden
-                  ? "tradable 100%"
-                  : `tradable $${maxFunds}`
-          }
-          className="cg-range w-full"
-          style={{ "--fill": fill(effFunds, 11, maxFunds) } as React.CSSProperties}
-        />
+        {underfunded ? (
+          <p className="font-mono text-[11px] leading-relaxed text-amber-300/90">
+            {t("sizingUnderfunded")}
+          </p>
+        ) : (
+          <input
+            type="range"
+            min={MIN_STAKE_USD}
+            max={maxFunds}
+            step={maxFunds > 2000 ? 25 : 5}
+            value={effFunds}
+            onChange={(e) => setFunds(Number(e.target.value))}
+            disabled={balanceLoading || deployBusy}
+            title={
+              deployBusy
+                ? t("deployBusyElsewhere")
+                : balanceLoading
+                  ? t("balanceLoading")
+                  : hidden
+                    ? "tradable 100%"
+                    : `tradable $${maxFunds}`
+            }
+            className="cg-range w-full"
+            style={{ "--fill": fill(effFunds, MIN_STAKE_USD, maxFunds) } as React.CSSProperties}
+          />
+        )}
       </div>
       <div className="space-y-2.5">
         <div className="flex items-baseline justify-between">

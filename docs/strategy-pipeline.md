@@ -13,7 +13,7 @@ model gets a vote on whether its own output is safe.
    plan ──► model writes strategy
               │
               ▼
-        deterministic fixes          talib int→float, tuple subscripts
+        deterministic fixes          talib int→float
               │
               ▼
           VALIDATOR ──── fails ──►  errors handed back to the model
@@ -82,15 +82,16 @@ you check.
 | Rule | Why |
 |---|---|
 | TA-Lib float params must be floats | `nbdevup=2` instead of `2.0` crashes every candle |
-| No string subscripts on TA-Lib tuples | `bollinger['upperband']` raises `list indices must be integers or slices, not str` |
+| Multi-output `ta.` results subscript by NAME | `talib.abstract` returns a DataFrame with named columns, so `bollinger[0]` raises `KeyError: 0`; an unknown name (`bollinger['lower']`) raises its own KeyError. Plain `import talib` tuples are left alone — integer subscripts are correct there |
 | No freqtrade order-flow columns | `dataframe['delta']` and friends are never populated on Hyperliquid — `KeyError` on every candle |
 | `use_public_trades` / `orderflow` config rejected | Not supported on Hyperliquid |
 
-The tuple rule earned its place. A live HYPE strategy wrote `bollinger['upperband']` and
-raised on every candle for ten hours. Freqtrade catches per-candle strategy errors and
-logs a warning, so the pod stayed healthy, the deployment stayed *running*, the dataframe
-stayed empty, and a funded account placed nothing while its entry condition was met seven
-times.
+The subscript rule is a validator hard error, not a silent rewrite, on purpose: a regex
+rewrite cannot see scope, so it corrupts holders that are later reassigned and tuple code
+under a plain `import talib`. The repair loop converges on the error instead — the model
+re-emits the named form. The stakes are per-candle strategy errors: Freqtrade catches
+them and logs a warning, so the pod stays healthy, the deployment stays *running*, and a
+funded account places nothing while its entry condition is met.
 
 ### Sandboxing
 
@@ -103,9 +104,9 @@ isolation lives.
 
 Look at the list again and a shape appears. Almost every rule is a **member of an
 unbounded class**: "code that parses but raises", "config that validates but never
-trades". We have been fixing that class one member at a time — first `nbdevup=2`, then
-tuple subscripts — and each fix is correct, and none of them generalise. The next mistake
-will be a different member.
+trades". We have been catching that class one member at a time — first `nbdevup=2`, then
+multi-output subscripts — and each rule is correct, and none of them generalise. The next
+mistake will be a different member.
 
 Enumerating members is a losing game. Two things actually close the class:
 

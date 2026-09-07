@@ -37,6 +37,25 @@ export const RESOLUTION_TO_LIGHTER: Record<string, string> = {
   "60": "1h", "240": "4h", "720": "12h", "1D": "1d",
 };
 
+/** The loaded bar time nearest to an arbitrary timestamp, or null with no
+ *  bars — timeToCoordinate resolves only bar times, so a vertical line must
+ *  snap to one to be drawable at all. */
+export function nearestBarTime(
+  candles: ReadonlyArray<{ time: number }>,
+  time: number,
+): number | null {
+  let best: number | null = null;
+  let bestDist = Infinity;
+  for (const c of candles) {
+    const dist = Math.abs(Number(c.time) - time);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = Number(c.time);
+    }
+  }
+  return best;
+}
+
 /** Hyperliquid candleSnapshot rows (strings) → preview candles. */
 export function parseHlCandles(
   raw: Array<{ t: number; o: string; h: string; l: string; c: string }>,

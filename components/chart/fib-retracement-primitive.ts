@@ -8,6 +8,7 @@ import type {
 import {
   drawSelectionHandle,
   strokeSelectionGlow,
+  timeToXWithWhitespace,
   type TrendPoint,
 } from "./trend-line-primitive";
 
@@ -98,15 +99,14 @@ class FibRetracementPaneView implements IPrimitivePaneView {
     this._anchors = null;
     const attached = this._source.attachedTo;
     if (!attached) return;
-    const timeScale = attached.chart.timeScale();
     const { p1, p2 } = this._source;
-    const x1 = timeScale.timeToCoordinate(p1.time);
-    const x2 = timeScale.timeToCoordinate(p2.time);
-    // Either anchor off the loaded range → skip the frame, same rule as the
+    const x1 = timeToXWithWhitespace(attached, p1.time);
+    const x2 = timeToXWithWhitespace(attached, p2.time);
+    // Either anchor unresolvable → skip the frame, same rule as the
     // trendline: no levels drawn to a wrong place.
     if (x1 === null || x2 === null) return;
-    this._x1 = Number(x1);
-    this._x2 = Number(x2);
+    this._x1 = x1;
+    this._x2 = x2;
     for (const ratio of this._source.ratios) {
       const price = p2.price + (p1.price - p2.price) * ratio;
       const y = attached.series.priceToCoordinate(price);

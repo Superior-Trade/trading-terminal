@@ -15,7 +15,7 @@ import type {
  * time to a coordinate, renderer draws top-to-bottom in bitmap space.
  */
 
-import { drawSelectionHandle, strokeSelectionGlow } from "./trend-line-primitive";
+import { drawSelectionHandle, strokeSelectionGlow, timeToXWithWhitespace } from "./trend-line-primitive";
 
 type RenderTarget = Parameters<IPrimitivePaneRenderer["draw"]>[0];
 
@@ -73,9 +73,8 @@ class VerticalLinePaneView implements IPrimitivePaneView {
       this._x = null;
       return;
     }
-    // null off the loaded range — the renderer then skips the frame.
-    const x = attached.chart.timeScale().timeToCoordinate(this._source.time);
-    this._x = x === null ? null : Number(x);
+    // null when unresolvable — the renderer then skips the frame.
+    this._x = timeToXWithWhitespace(attached, this._source.time);
   }
 
   renderer(): IPrimitivePaneRenderer | null {

@@ -3,6 +3,14 @@
 // the caller's resolved API key — auth stays at the route/tool boundary.
 
 import { ARB_USDC } from "./arbitrum";
+import {
+  COMMITTED_DEPLOY_STATES,
+  DEPOSIT_GUIDANCE_PHRASE,
+  FUNDING_BUFFER,
+  MIN_STAKE_USD,
+  deployableFundsUsd,
+  neededForStakeUsd,
+} from "./sizing-ceiling";
 
 export const SUPERIOR_API_BASE =
   process.env.SUPERIOR_TRADE_API_URL ?? "https://api.superior.trade";
@@ -69,14 +77,11 @@ async function jsonOf(res: Response): Promise<Record<string, unknown>> {
 }
 
 /* ── Insufficient-balance mapping ──────────────────────────────────────
- *  A $0 account pressing Deploy used to surface the upstream API's own
- *  wording ("account_not_funded_on_hyperliquid", "This bracket needs about
- *  $61.95 of margin. Main: $0.00 available …") or nothing at all — new users
- *  never learned that funding was the problem. Everything upstream can say
- *  about missing money funnels through here into ONE plain sentence that
- *  names the balance, the requirement, and the Deposit button, and that same
- *  string reaches the UI card/toast AND the chat agent's tool results
- *  (routes and agent tools both call these libs). */
+ *  Everything upstream can say about missing money funnels through here
+ *  into ONE plain sentence that names the balance, the requirement, and
+ *  the Deposit button; that same string reaches the UI card/toast AND the
+ *  chat agent's tool results (routes and agent tools both call these
+ *  libs). */
 
 /** Upstream codes that all mean "the account does not hold enough USDC" —
  *  i.e. a deposit is THE fix. From the upstream Superior API: bracket
@@ -106,8 +111,8 @@ export function isInsufficientBalanceError(json: Record<string, unknown>): boole
 }
 
 /** The one funding sentence users see. Degrades cleanly when a figure is
- *  unknown; the client keys off the "Add funds via the Deposit button"
- *  phrase to open the deposit dialog and show this text verbatim. */
+ *  unknown; the client keys off DEPOSIT_GUIDANCE_PHRASE to open the
+ *  deposit dialog and show this text verbatim. */
 export function insufficientBalanceMessage(opts: {
   kind: "deployment" | "order";
   holdsUsd?: number | null;
@@ -123,7 +128,7 @@ export function insufficientBalanceMessage(opts: {
     typeof opts.neededUsd === "number" && Number.isFinite(opts.neededUsd)
       ? `${what} needs at least $${opts.neededUsd.toFixed(2)}`
       : `not enough for ${what}`;
-  return `${holds} — ${needs}. Add funds via the Deposit button (top right), then ${again}.`;
+  return `${holds} — ${needs}. ${DEPOSIT_GUIDANCE_PHRASE} (top right), then ${again}.`;
 }
 
 /** Total reachable balance from an upstream bracket `accounts` breakdown
@@ -532,30 +537,67 @@ export function deploymentOccupiesExchange(
   );
 }
 
-async function occupiedWalletsUpstream(
+interface DeploymentCapital {
+  /** Wallets a current deployment can still trade on (placement gate). */
+  occupied: Set<string>;
+  /** Stake committed by live strategies per lowercased wallet; null = a
+   *  live strategy whose stake is unreadable, so the whole wallet counts
+   *  as spoken for. Mirrors the panel's committedByWallet. */
+  committedUsd: Map<string, number | null>;
+}
+
+async function deploymentCapitalUpstream(
   key: string,
   exchange = "hyperliquid",
-): Promise<Set<string>> {
+): Promise<DeploymentCapital> {
   try {
     const [deps, hist] = await Promise.all([
       listDeployments(key),
       deploymentHistory(key),
     ]);
+    const rows = (deps.json.items ?? []) as Array<
+      DeploymentOccupancyRow & { config?: { stake_amount?: unknown } }
+    >;
     const current = new Set(
-      ((deps.json.items ?? []) as DeploymentOccupancyRow[])
+      rows
         .filter((d) => d.id && deploymentOccupiesExchange(d, exchange))
         .map((d) => d.id) as string[],
     );
+    const walletByDeployment = new Map<string, string>();
     const occupied = new Set<string>();
     for (const s of ((hist.json as { items?: Array<{ deploymentId?: string | null; walletAddress?: string | null }> }).items ?? [])) {
-      if (s.deploymentId && s.walletAddress && current.has(s.deploymentId)) {
-        occupied.add(s.walletAddress.toLowerCase());
-      }
+      if (!s.deploymentId || !s.walletAddress) continue;
+      walletByDeployment.set(s.deploymentId, s.walletAddress.toLowerCase());
+      if (current.has(s.deploymentId)) occupied.add(s.walletAddress.toLowerCase());
     }
-    return occupied;
+    const committedUsd = new Map<string, number | null>();
+    for (const d of rows) {
+      if (!d.id || d.deletedAt) continue;
+      if (!COMMITTED_DEPLOY_STATES.includes(d.status ?? "")) continue;
+      if (deploymentExchangeName(d) !== exchange.toLowerCase()) continue;
+      const wallet = (d.walletAddress ?? walletByDeployment.get(d.id) ?? "").toLowerCase();
+      if (!wallet) continue;
+      const raw = d.config?.stake_amount;
+      const stake = typeof raw === "number" ? raw : Number.parseFloat(String(raw ?? ""));
+      const prev = committedUsd.get(wallet);
+      if (prev === null) continue; // already poisoned
+      if (!Number.isFinite(stake) || stake <= 0) {
+        committedUsd.set(wallet, null);
+        continue;
+      }
+      committedUsd.set(wallet, (prev ?? 0) + stake);
+    }
+    return { occupied, committedUsd };
   } catch {
-    return new Set();
+    return { occupied: new Set(), committedUsd: new Map() };
   }
+}
+
+async function occupiedWalletsUpstream(
+  key: string,
+  exchange = "hyperliquid",
+): Promise<Set<string>> {
+  return (await deploymentCapitalUpstream(key, exchange)).occupied;
 }
 
 /** Top a trading account up to the stake, pulling from the MAIN wallet
@@ -569,17 +611,20 @@ async function fundWallet(
   destination: string,
   stakeUsd: number,
   accounts: Array<{ account_index?: number; wallet_address?: string }>,
+  occupiedWallets?: Set<string>,
 ): Promise<string | null> {
   const balance = await hlWithdrawable(destination);
   if (balance === null) return null;
-  // 5% over the stake: Freqtrade's tradable_balance_ratio (default 0.99)
-  // reserves 1% of the wallet, and HL taker fees (0.045% of NOTIONAL, so
-  // leverage-scaled — ~3.6% of stake round-trip at 40x) come out of the
-  // same balance. Funding exactly the stake = a bot that never trades.
-  let need = Math.ceil(Math.max(0, stakeUsd * 1.05 - balance) * 100) / 100;
+  // FUNDING_BUFFER over the stake: Freqtrade's tradable_balance_ratio
+  // (default 0.99) reserves 1% of the wallet, and HL taker fees (0.045% of
+  // NOTIONAL, so leverage-scaled — ~3.6% of stake round-trip at 40x) come
+  // out of the same balance. Funding exactly the stake = a bot that never
+  // trades.
+  let need =
+    Math.ceil(Math.max(0, stakeUsd * FUNDING_BUFFER - balance) * 100) / 100;
   if (need <= 0) return "0";
 
-  const occupied = await occupiedWalletsUpstream(key);
+  const occupied = occupiedWallets ?? (await occupiedWalletsUpstream(key));
   const main = accounts.find((a) => (a.account_index ?? 1) === 1)?.wallet_address;
   const otherIdle = accounts
     .filter(
@@ -710,6 +755,7 @@ async function ensureHyperliquidReady(
   address: string,
   minFundUsd: number,
   accounts: Array<{ account_index?: number; wallet_address?: string }>,
+  occupiedWallets?: Set<string>,
 ): Promise<{ ready: boolean; detail?: string; spent?: boolean }> {
   const bootstrap = async () =>
     fetch(`${SUPERIOR_API_BASE}/v3/account/${address}/hyperliquid`, {
@@ -734,7 +780,13 @@ async function ensureHyperliquidReady(
 
   // Repairable: it only needs a balance. Fund the minimum the venue requires,
   // or the stake if that is larger, then finish setup.
-  const funded = await fundWallet(key, address, Math.max(minFundUsd, 5), accounts);
+  const funded = await fundWallet(
+    key,
+    address,
+    Math.max(minFundUsd, 5),
+    accounts,
+    occupiedWallets,
+  );
   if (funded === null) return { ready: false, detail: "could not fund for setup" };
 
   const second = await bootstrap();
@@ -752,6 +804,9 @@ async function tryDeployOnTradingAccount(
   deploymentId: string,
   exchange: string,
   stakeUsd: number | null,
+  // A walletOverview snapshot from the caller, so one deploy doesn't
+  // re-fetch the account list and every balance it already holds.
+  overview?: WalletOverviewItem[] | null,
 ): Promise<{
   ok: boolean;
   address?: string;
@@ -759,13 +814,39 @@ async function tryDeployOnTradingAccount(
   funded?: string | null;
   detail?: string;
 }> {
-  const acct = await fetch(`${SUPERIOR_API_BASE}/v2/account`, { headers: headers(key) });
-  const acctJson = await jsonOf(acct);
-  const items = (acctJson.items ?? []) as Array<{
+  let items: Array<{
     name?: string;
     account_index?: number;
     wallet_address?: string;
   }>;
+  let balanceOf: (address: string) => number;
+  let occupiedWallets: Set<string> | undefined;
+  if (overview?.length) {
+    items = overview.map((w) => ({
+      name: w.name ?? undefined,
+      account_index: w.accountIndex,
+      wallet_address: w.address,
+    }));
+    const byAddr = new Map(
+      overview.map((w) => [w.address.toLowerCase(), w.withdrawableUsd ?? 0]),
+    );
+    balanceOf = (address) => byAddr.get(address.toLowerCase()) ?? 0;
+    occupiedWallets = new Set(
+      overview.filter((w) => w.occupied).map((w) => w.address.toLowerCase()),
+    );
+  } else {
+    const acct = await fetch(`${SUPERIOR_API_BASE}/v2/account`, { headers: headers(key) });
+    const acctJson = await jsonOf(acct);
+    items = (acctJson.items ?? []) as typeof items;
+    const addresses = items
+      .filter((a) => a.wallet_address)
+      .map((a) => a.wallet_address as string);
+    const balances = await Promise.all(addresses.map((a) => hlWithdrawable(a)));
+    const byAddr = new Map(
+      addresses.map((a, i) => [a.toLowerCase(), balances[i] ?? 0]),
+    );
+    balanceOf = (address) => byAddr.get(address.toLowerCase()) ?? 0;
+  }
   // Index 1 is the main wallet — the one that just failed as busy.
   const others = items.filter(
     (a) => a.wallet_address && (a.account_index ?? 1) !== 1,
@@ -775,11 +856,8 @@ async function tryDeployOnTradingAccount(
 
   // Richest first: minimizes the main-wallet top-up and matches the sizing
   // slider's promise (deployable = main + the richest free trading account).
-  const balances = await Promise.all(
-    others.map((a) => hlWithdrawable(a.wallet_address as string)),
-  );
   const ordered = others
-    .map((a, i) => ({ a, bal: balances[i] ?? 0 }))
+    .map((a) => ({ a, bal: balanceOf(a.wallet_address as string) }))
     .sort((x, y) => y.bal - x.bal)
     .map((x) => x.a);
 
@@ -811,7 +889,13 @@ async function tryDeployOnTradingAccount(
           lastError = `${a.name ?? addr.slice(0, 8)}: needs setup, and another account was already funded for it this deploy`;
           break;
         }
-        const ready = await ensureHyperliquidReady(key, addr, stakeUsd ?? 0, items);
+        const ready = await ensureHyperliquidReady(
+          key,
+          addr,
+          stakeUsd ?? 0,
+          items,
+          occupiedWallets,
+        );
         if (ready.spent) spentOnSetup = true;
         if (!ready.ready) {
           lastError = `${a.name ?? addr.slice(0, 8)}: ${ready.detail ?? "setup incomplete"}`;
@@ -835,7 +919,9 @@ async function tryDeployOnTradingAccount(
       // Credentials stuck — top the account up to the stake from main so
       // the bot actually has capital (nothing upstream funds it).
       const funded =
-        stakeUsd !== null ? await fundWallet(key, addr, stakeUsd, items) : null;
+        stakeUsd !== null
+          ? await fundWallet(key, addr, stakeUsd, items, occupiedWallets)
+          : null;
       return { ok: true, address: addr, label: a.name, funded };
     }
     if (attempt) {
@@ -886,12 +972,12 @@ async function tryDeployOnSubaccount(
   const candidates = subs.filter((s) => {
     const addr = s.subAccountUser?.toLowerCase();
     if (!addr || linked.has(addr)) return false;
-    return parseFloat(s.clearinghouseState?.withdrawable ?? "0") >= 11;
+    return parseFloat(s.clearinghouseState?.withdrawable ?? "0") >= MIN_STAKE_USD;
   });
   if (!candidates.length)
     return {
       ok: false,
-      detail: `all ${subs.length} sub-account(s) are occupied or under the $11 minimum`,
+      detail: `all ${subs.length} sub-account(s) are occupied or under the $${MIN_STAKE_USD} minimum`,
     };
 
   for (const c of candidates) {
@@ -1004,40 +1090,38 @@ export async function deployStrategy(
   // ── Funding pre-flight ──
   // An unfunded account otherwise pays for the whole create→credentials→start
   // pipeline and gets back an upstream step error written for operators
-  // ("account_not_funded_on_hyperliquid") — which is how unfunded new users
-  // deployed into opaque failures. When everything the funding pool can
-  // reach (main deployable incl. held USDC + idle trading accounts) cannot
-  // cover the stake with fundWallet's ×1.05 fee/reserve headroom, fail BEFORE
-  // creating anything, with the deposit guidance. Best-effort: any unknown
-  // balance or overview failure lets the deploy proceed and the post-hoc
-  // mapping below still translates the upstream error.
+  // ("account_not_funded_on_hyperliquid"). The hard block uses the SAME
+  // deployable-funds computation as the sizing slider (deployableFundsUsd:
+  // per-wallet free margin net of committed stakes, plus main's held USDC)
+  // so any stake the slider offers passes here by construction — the old
+  // occupied-wallet exclusion false-rejected the normal stop→redeploy flow
+  // and disagreed with the ceiling the panel had just advertised. The
+  // snapshot is fetched once and reused by the wallet-choice and fallback
+  // steps below. Best-effort: any unknown balance or overview failure lets
+  // the deploy proceed and the post-hoc mapping still translates the
+  // upstream error.
+  let overview: WalletOverviewItem[] | null = null;
   if (stakeUsd !== null && exchange === "hyperliquid") {
     try {
-      const wallets = await walletOverview(key);
-      const main = wallets.find((w) => w.isMain);
-      if (main && main.deployableUsd !== null) {
-        const idleSum = wallets
-          .filter((w) => !w.isMain && !w.occupied)
-          .reduce((s, w) => s + (w.withdrawableUsd ?? 0), 0);
-        const reachable = Math.floor((main.deployableUsd + idleSum) * 100) / 100;
-        const needed = Math.ceil(stakeUsd * 1.05 * 100) / 100;
-        if (reachable < needed) {
-          return {
-            status: 400,
-            json: {
-              error: "insufficient_balance",
-              message: insufficientBalanceMessage({
-                kind: "deployment",
-                holdsUsd: reachable,
-                neededUsd: needed,
-              }),
-              holds_usd: reachable,
-              needed_usd: needed,
-            },
-            steps: { create: 400 },
-            stepErrors: {},
-          };
-        }
+      overview = await walletOverview(key);
+      const reachable = deployableFundsUsd(overview);
+      const needed = neededForStakeUsd(stakeUsd);
+      if (reachable !== null && reachable < needed) {
+        return {
+          status: 400,
+          json: {
+            error: "insufficient_balance",
+            message: insufficientBalanceMessage({
+              kind: "deployment",
+              holdsUsd: reachable,
+              neededUsd: needed,
+            }),
+            holds_usd: reachable,
+            needed_usd: needed,
+          },
+          steps: { create: 400 },
+          stepErrors: {},
+        };
       }
     } catch {
       /* pre-flight is best-effort */
@@ -1070,29 +1154,19 @@ export async function deployStrategy(
   };
 
   // Upfront wallet choice: the default credentials path binds the MAIN
-  // wallet — if main can't cover the stake (with the ×1.05 headroom) the
-  // bot would link and then silently starve. When another trading account
-  // plus a main top-up CAN cover it (this is what the sizing slider's
-  // ceiling promises), link that account first instead.
+  // wallet — if main can't cover the stake (with the FUNDING_BUFFER
+  // headroom) the bot would link and then silently starve. When another
+  // trading account plus a main top-up CAN cover it (this is what the
+  // sizing slider's ceiling promises), link that account first instead.
+  // Reads the pre-flight's walletOverview snapshot rather than re-fetching.
   let credsDone = false;
   if (stakeUsd !== null && exchange === "hyperliquid") {
     try {
-      const acct = await fetch(`${SUPERIOR_API_BASE}/v2/account`, {
-        headers: headers(key),
-      });
-      const acctJson = await jsonOf(acct);
-      const main = (
-        (acctJson.items ?? []) as Array<{
-          account_index?: number;
-          wallet_address?: string;
-        }>
-      ).find((a) => (a.account_index ?? 1) === 1)?.wallet_address;
-      const [mainW, mainHeld] = main
-        ? await Promise.all([hlWithdrawable(main), heldUsdcOnChain(main)])
-        : [null, null];
-      const mainDeployable = deployableHyperliquidUsd(mainW, mainHeld, true);
-      if (mainDeployable !== null && stakeUsd * 1.05 > mainDeployable) {
-        const ta = await tryDeployOnTradingAccount(key, id, exchange, stakeUsd);
+      const wallets = overview ?? (overview = await walletOverview(key));
+      const main = wallets.find((w) => w.isMain);
+      const mainFree = main ? deployableFundsUsd([main]) : null;
+      if (mainFree !== null && neededForStakeUsd(stakeUsd) > mainFree) {
+        const ta = await tryDeployOnTradingAccount(key, id, exchange, stakeUsd, wallets);
         if (ta.ok) {
           applyTa(ta);
           credsDone = true;
@@ -1142,7 +1216,7 @@ export async function deployStrategy(
         /already linked|duplicate_wallet|wallet_occupied/i.test(stepErrors.credentials)
       ) {
         try {
-          const ta = await tryDeployOnTradingAccount(key, id, exchange, stakeUsd);
+          const ta = await tryDeployOnTradingAccount(key, id, exchange, stakeUsd, overview);
           if (ta.ok) {
             applyTa(ta);
           } else {
@@ -1400,6 +1474,10 @@ export interface WalletOverviewItem {
   /** Held by a current deployment or an active bracket order (one active
    *  execution per wallet). */
   occupied: boolean;
+  /** Stake committed to live strategies on this wallet ($0 = none); null =
+   *  a live strategy with an unreadable stake, treating the whole wallet as
+   *  spoken for. Free funds = withdrawable − committed. */
+  committedUsd: number | null;
   isMain: boolean;
 }
 
@@ -1411,10 +1489,11 @@ export async function walletOverview(key: string): Promise<WalletOverviewItem[]>
     account_index?: number;
     wallet_address?: string;
   }>;
-  const [occupiedDeploys, brackets] = await Promise.all([
-    occupiedWalletsUpstream(key),
+  const [capital, brackets] = await Promise.all([
+    deploymentCapitalUpstream(key),
     listBrackets(key).catch(() => ({ status: 0, json: {} as Record<string, unknown> })),
   ]);
+  const occupiedDeploys = capital.occupied;
   // Active brackets occupy their wallet too (upstream enforces the same).
   const bracketWallets = new Set(
     (((brackets.json as { items?: Array<Record<string, unknown>> }).items ?? []) as Array<{
@@ -1450,6 +1529,11 @@ export async function walletOverview(key: string): Promise<WalletOverviewItem[]>
           occupied:
             occupiedDeploys.has(address.toLowerCase()) ||
             bracketWallets.has(address.toLowerCase()),
+          // Nullish-coalescing would erase the null poison value — only an
+          // absent entry means $0 committed.
+          committedUsd: capital.committedUsd.has(address.toLowerCase())
+            ? (capital.committedUsd.get(address.toLowerCase()) as number | null)
+            : 0,
           isMain,
         };
       }),

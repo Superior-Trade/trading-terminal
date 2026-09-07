@@ -516,6 +516,9 @@ export function MarketPicker() {
       return;
     }
     if (e.key === "Enter") {
+      // An IME commit (choosing 比特幣 from the candidate list) arrives as
+      // Enter too — it must finish the composition, never switch the pair.
+      if (e.nativeEvent.isComposing) return;
       // Highlighted row wins; with none, a filter narrowed to ONE row picks
       // it (the type-and-enter flow).
       const row = hl >= 0 && hl < rows.length ? rows[hl] : rows.length === 1 ? rows[0] : null;
@@ -1044,11 +1047,9 @@ export function MarketPicker() {
               // genuinely empty filter result — an empty list during the
               // first universe fetch is not "no markets match".
               const lighterOnly = venueUi && venueFilter === "lighter";
-              const loading =
-                !query &&
-                (lighterOnly
-                  ? lighter.status === "loading" || lighter.status === "idle"
-                  : !isReady && !loadError);
+              const loading = lighterOnly
+                ? lighter.status === "loading" || lighter.status === "idle"
+                : !isReady && !loadError;
               const failed = lighterOnly
                 ? lighter.status === "error"
                 : !isReady && loadError !== null;
