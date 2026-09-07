@@ -16,6 +16,8 @@
  *  by the plan cards, deployPlan, and the compile payload.
  */
 
+import { MIN_STAKE_USD } from "./sizing-ceiling";
+
 export interface PlanSizingSuggestion {
   /** % of the capital base lost if the stop hits (model-graded by setup quality). */
   riskPct: number;
@@ -44,8 +46,9 @@ export interface DerivedSizing {
 export const LIQ_BUFFER = 3;
 /** HL min order ≈ $10 notional; keep a little headroom. */
 const MIN_NOTIONAL = 12;
-/** Superior deploy minimum stake. */
-const MIN_STAKE = 10;
+// Superior deploy minimum stake (HL's $10 order minimum plus the upstream
+// fee/reserve headroom) — shared with the slider and the pre-flight.
+const MIN_STAKE = MIN_STAKE_USD;
 /** Absolute leverage ceiling when the pair's cap is unknown. */
 const DEFAULT_MAX_LEVERAGE = 25;
 

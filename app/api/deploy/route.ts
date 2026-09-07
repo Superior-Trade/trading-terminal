@@ -4,6 +4,7 @@ import { deployStrategy } from "../../../lib/superior-api";
 import { track } from "../../../lib/analytics";
 import { fundsFrozen } from "../../../lib/kill-switch";
 import { normalizeConfigPairs } from "../../../lib/pair-normalize";
+import { MIN_STAKE_USD } from "../../../lib/sizing-ceiling";
 
 export const runtime = "nodejs";
 // Allocate-on-deploy (#903) moved the on-chain funding of the trading account
@@ -38,16 +39,16 @@ export async function POST(req: Request) {
     // makes freqtrade drop the market and idle a funded wallet.
     const bodyCfg = (body as { config?: Record<string, unknown> })?.config;
     if (bodyCfg) normalizeConfigPairs(bodyCfg);
-    // Hyperliquid's $10 minimum order value: a numeric stake below it can
-    // never fill, so the bot would spin doing nothing. ("unlimited" and
+    // The deployable minimum is $11, not Hyperliquid's $10 order minimum:
+    // upstream reserves stake × FUNDING_BUFFER for fees/headroom and rejects
+    // anything under $11 ("increase to at least $11"). ("unlimited" and
     // missing stakes size off wallet balance — those pass through.)
     const stake = (body as { config?: { stake_amount?: unknown } })?.config
       ?.stake_amount;
-    if (typeof stake === "number" && stake < 10) {
+    if (typeof stake === "number" && stake < MIN_STAKE_USD) {
       return NextResponse.json(
         {
-          error:
-            "stake_amount below the $10 Hyperliquid minimum order value — raise the funding to at least 10 USDC",
+          error: `stake_amount below the $${MIN_STAKE_USD} deploy minimum (Hyperliquid's $10 order value plus the upstream fee reserve) — raise the funding to at least ${MIN_STAKE_USD} USDC`,
         },
         { status: 400 },
       );

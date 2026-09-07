@@ -399,6 +399,10 @@ const DICT: Record<string, { en: string; zh: string }> = {
     zh: "無法移除。請至 Running 刪除一個策略後再試。",
   },
   balanceLoading: { en: "loading balance…", zh: "載入餘額中…" },
+  sizingUnderfunded: {
+    en: "Balance can't fund the $11 minimum deploy — add funds via the Deposit button (top right).",
+    zh: "餘額不足以部署 $11 最低金額 — 請點右上角 Deposit 入金。",
+  },
   clearMarks: { en: "✕ Clear marks", zh: "✕ 清除標記" },
   planUpdated: { en: "Plan updated", zh: "計畫已更新" },
   detectingLabel: { en: "detecting setups…", zh: "偵測策略中…" },
@@ -458,6 +462,11 @@ const DICT: Record<string, { en: string; zh: string }> = {
   colVolume: { en: "Volume", zh: "成交量" },
   colOpenInt: { en: "Open Int.", zh: "未平倉" },
   noMarkets: { en: "No markets match", zh: "沒有符合的市場" },
+  mktLoading: { en: "Loading markets…", zh: "市場載入中…" },
+  mktLoadError: {
+    en: "Markets unavailable — check your connection and reload",
+    zh: "市場資料無法取得 — 請檢查網路連線後重新整理",
+  },
   // Venue layer (flag-gated Lighter integration).
   venuePicker: { en: "Venue", zh: "交易所" },
   venueAll: { en: "All", zh: "全部" },

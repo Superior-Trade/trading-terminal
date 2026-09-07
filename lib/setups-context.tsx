@@ -16,6 +16,7 @@ import { track } from "./track";
 import { useAuthGate } from "../components/providers";
 import { type PlanSizingSuggestion } from "./plan-sizing";
 import { venueOfSymbol } from "./venues";
+import { DEPOSIT_GUIDANCE_PHRASE, clampPersistedStake } from "./sizing-ceiling";
 
 export type Tier = "S" | "A" | "B" | "C" | "D";
 
@@ -183,7 +184,7 @@ export function withDetails(message: string, details: unknown): string {
  * What actually failed, rather than a guess at what failed.
  *
  * The safety guard has ~28 rules — lookahead bias, forbidden imports, an
- * unscaled stop, a malformed minimal_roi, a TA-Lib tuple subscript, a missing
+ * unscaled stop, a malformed minimal_roi, a TA-Lib subscript mistake, a missing
  * can_short — and every one of them arrives as "strategy failed safety
  * validation". The card answered all of them with "adjust the plan's stop or
  * leverage", which is the right advice for exactly two of those rules and
@@ -211,6 +212,74 @@ export function safetyRejectMessage(
   return more > 0
     ? `${lead} ${first} ${t("deploySafetyRejectMore").replace("{n}", String(more))}`
     : `${lead} ${first}`;
+}
+
+export function deployFailureMessage(
+  rawError: string,
+  t: (k: string) => string,
+  fundingFailure: boolean = isFundingFailure(rawError),
+): string {
+  // Two failure classes carry long, scary internal detail (deployment
+  // IDs, wallet addresses, the fallback chain; or the stop/leverage math).
+  // Show a short, calm line — the full text is already tracked in analytics
+  // and logged server-side / fed to the compile repair loop.
+  const walletBusy =
+    /already running a live strategy|already linked to deployment|duplicate_wallet|live one-shot order|wallet_occupied/i.test(
+      rawError,
+    );
+  // The server names the trading account and the strategy holding it, and
+  // that sentence is the whole answer — pass it through rather than
+  // replacing it with a generic line that omits both.
+  const walletBusyNamed = /already running a live strategy \(/i.test(rawError);
+  const safetyReject = /failed safety validation/i.test(rawError);
+  return fundingFailure
+    ? // The server-composed funding sentence carries the actual balance and
+      // requirement ("Your trading account holds $3.20 — this deployment
+      // needs at least $105.00 …") — pass it through verbatim; only cryptic
+      // upstream/exchange strings get swapped for the generic prompt.
+      isServerFundingGuidance(rawError)
+      ? rawError
+      : t("deployNeedsFunding")
+    : walletBusy
+      ? walletBusyNamed
+        ? rawError
+        : t("deployWalletBusy")
+      : safetyReject
+        ? safetyRejectMessage(rawError, t)
+        : rawError;
+}
+
+/** The deposit sentence composed server-side (lib/superior-api's
+ *  insufficientBalanceMessage) — already plain language WITH the amounts, so
+ *  it must reach the user unedited. */
+function isServerFundingGuidance(rawError: string): boolean {
+  return rawError.toLowerCase().includes(DEPOSIT_GUIDANCE_PHRASE.toLowerCase());
+}
+
+/** Margin rejections are NOT funding failures: the wallet can be funded and
+ *  the order still exceed free margin after fees, existing exposure,
+ *  leverage rounding, or exchange-side requirements — lowering size or
+ *  leverage fixes those as well as a deposit would. */
+const FUNDED_MARGIN_FAILURE = /insufficient[ _]margin/i;
+
+export function isFundingFailure(rawError: string): boolean {
+  // Match what a DEPOSIT actually fixes, tiered from specific to general.
+  // Loose substrings like a bare "agent wallet" or "does not exist" stay
+  // out: they appear in errors that have nothing to do with money and would
+  // pop the deposit dialog at fully funded accounts. "User or API Wallet
+  // 0x… does not exist" is kept on its own distinctive phrase — that one
+  // really does mean an unfunded HL account.
+  if (isServerFundingGuidance(rawError)) return true;
+  if (
+    /not (?:have )?enough|doesn't hold enough|below the \$?1[01]\b|minimum order|balance too low|raise the funding|no funds|not[ _]funded|no hyperliquid balance|deposit into it|user or api wallet/i.test(
+      rawError,
+    )
+  )
+    return true;
+  // Catch-all for funding phrasings the tiers above don't enumerate — but
+  // the margin exclusion wins over it.
+  if (FUNDED_MARGIN_FAILURE.test(rawError)) return false;
+  return /insufficient/i.test(rawError);
 }
 
 // "EDIT 3 - Mean Reversion" → prefix strip + number capture for edit cards.
@@ -297,7 +366,12 @@ export function SetupsProvider({ children }: { children: ReactNode }) {
         funds?: number;
         leverage?: number;
       };
-      if (Number.isFinite(j.funds) && j.funds! >= 10) setFundsState(j.funds!);
+      // Clamp under-minimum persisted funds up to the floor instead of
+      // discarding them — falling back to the $100 default would deploy
+      // 10x what a $10 cookie asked for. The live-balance ceiling clamps
+      // the other side once it loads.
+      const funds = clampPersistedStake(j.funds);
+      if (funds !== null) setFundsState(funds);
       if (Number.isFinite(j.leverage) && j.leverage! >= 1)
         setLeverageState(j.leverage!);
     } catch {
@@ -517,41 +591,8 @@ export function SetupsProvider({ children }: { children: ReactNode }) {
         // account + no approved agent wallet until it's funded). For those we
         // swap the cryptic exchange string for a plain deposit prompt and open
         // the deposit dialog — the fix is funding, not retrying.
-        // Match only what a DEPOSIT actually fixes. This used to test loose
-        // substrings — "does not exist", "does not have", a bare "agent wallet"
-        // — which appear in errors that have nothing to do with money:
-        // "Failed to export agent wallet key", "Hyperliquid approveAgent
-        // failed: invalid agent wallet". Those are key and bootstrap failures,
-        // and they popped the deposit dialog at people whose accounts were
-        // fully funded. "User or API Wallet 0x… does not exist" is kept, but
-        // matched on its own distinctive phrase rather than on "does not
-        // exist" alone — that one really does mean an unfunded HL account.
-        const needsFunding =
-          /insufficient|not (?:have )?enough|below the \$?10\b|minimum order|balance too low|raise the funding|no funds|not[ _]funded|no hyperliquid balance|deposit into it|user or api wallet/i.test(
-            rawError,
-          );
-        // Two failure classes carry long, scary internal detail (deployment
-        // IDs, wallet addresses, the fallback chain; or the stop/leverage math).
-        // Show a short, calm line — the full text is already tracked above and
-        // logged server-side / fed to the compile repair loop.
-        const walletBusy =
-          /already running a live strategy|already linked to deployment|duplicate_wallet|live one-shot order|wallet_occupied/i.test(
-            rawError,
-          );
-        // The server names the trading account and the strategy holding it, and
-        // that sentence is the whole answer — pass it through rather than
-        // replacing it with a generic line that omits both.
-        const walletBusyNamed = /already running a live strategy \(/i.test(rawError);
-        const safetyReject = /failed safety validation/i.test(rawError);
-        const error = needsFunding
-          ? t("deployNeedsFunding")
-          : walletBusy
-            ? walletBusyNamed
-              ? rawError
-              : t("deployWalletBusy")
-            : safetyReject
-              ? safetyRejectMessage(rawError, t)
-              : rawError;
+        const fundingFailure = isFundingFailure(rawError);
+        const error = deployFailureMessage(rawError, t, fundingFailure);
         setDeployProgress((p) =>
           p && p.planId === plan.id ? { ...p, error } : p,
         );
@@ -559,7 +600,7 @@ export function SetupsProvider({ children }: { children: ReactNode }) {
           t("deployFailedNote").replace("{title}", plan.title).replace("{error}", error),
           "Deploy · Superior infra",
         );
-        if (needsFunding) {
+        if (fundingFailure) {
           try {
             window.dispatchEvent(new Event("cg:open-deposit"));
           } catch {

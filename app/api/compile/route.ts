@@ -9,7 +9,6 @@ import { track } from "../../../lib/analytics";
 import {
   validateStrategySafety,
   fixTaLibFloatParams,
-  fixTaLibTupleSubscripts,
 } from "../../../lib/freqtrade-guard";
 import {
   normalizeConfigPairs,
@@ -149,10 +148,12 @@ export async function POST(req: Request) {
     // audit, incl. a live deployment) — models keep doing it regardless of
     // prompt wording, so it's rewritten in code.
     object.code = fixTaLibFloatParams(object.code);
-    object.code = fixTaLibTupleSubscripts(object.code);
     // Deterministic safety gate (stop math, liquidation distance, lookahead,
-    // NaN indicators, …). Errors flow back through the caller's existing
-    // repair loop (body.repair) so the model fixes exactly these issues.
+    // NaN indicators, TA-Lib multi-output subscripts, …). Errors flow back
+    // through the caller's existing repair loop (body.repair) so the model
+    // fixes exactly these issues. Subscript mistakes are validator errors on
+    // purpose — a scope-blind rewrite corrupts reassigned holders and
+    // plain-`import talib` tuple code.
     const guardErrors = validateStrategySafety({
       config: config as Record<string, unknown>,
       code: object.code,

@@ -23,6 +23,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { Streamdown } from "streamdown";
 import { useChartBridge, type ChartAction } from "../../lib/chart-bridge";
+import { HAS_ADVANCED_CHARTS } from "../../lib/chart-availability";
 import { useLang } from "../../lib/i18n";
 import { track } from "../../lib/track";
 import { useSetups, type Tier, type DetectedPlan } from "../../lib/setups-context";
@@ -339,7 +340,9 @@ function FibIcon({ className }: { className?: string }) {
 }
 
 /** Drawing tools offered by the chat-bar split button. ids are TradingView
- *  selectLineTool() names (passed through select_tool verbatim). */
+ *  selectLineTool() names (passed through select_tool verbatim). Both charts
+ *  honour the whole list — the preview grew a freehand brush of its own (see
+ *  preview-chart.tsx), so nothing is filtered per build any more. */
 const DRAW_TOOLS = [
   { id: "brush", labelKey: "toolBrush", Icon: PencilIcon },
   { id: "trend_line", labelKey: "toolTrendline", Icon: LineIcon },
@@ -348,6 +351,10 @@ const DRAW_TOOLS = [
   { id: "rectangle", labelKey: "toolRect", Icon: RectIcon },
   { id: "fib_retracement", labelKey: "toolFib", Icon: FibIcon },
 ] as const;
+// Advanced Charts keeps the historical brush-first default; the preview's
+// brush is drag-only pan-suppressing capture, so its pencil defaults to the
+// trendline and the brush stays one dropdown pick away.
+const DEFAULT_DRAW_TOOL: DrawTool = HAS_ADVANCED_CHARTS ? "brush" : "trend_line";
 type DrawTool = (typeof DRAW_TOOLS)[number]["id"];
 const isDrawTool = (v: unknown): v is DrawTool =>
   DRAW_TOOLS.some((t) => t.id === v);
@@ -511,9 +518,10 @@ export function FloatingChat() {
   // their deps (the chat-collapse ESC handler checks it to yield).
   const activeToolRef = useRef<DrawTool | null>(null);
   activeToolRef.current = activeTool;
-  // The split-button remembers the last-picked drawing tool (brush by default);
+  // The split-button remembers the last-picked drawing tool (brush by default
+  // on Advanced Charts; the preview has no brush, so trendline there);
   // the chevron dropdown swaps it.
-  const [lastDrawTool, setLastDrawTool] = useState<DrawTool>("brush");
+  const [lastDrawTool, setLastDrawTool] = useState<DrawTool>(DEFAULT_DRAW_TOOL);
   // localStorage is read AFTER mount: reading it in the initializer renders a
   // different icon than the server did and trips hydration.
   useEffect(() => {
@@ -1171,10 +1179,13 @@ export function FloatingChat() {
         }
         setMode((m) => (m === "peek" ? "idle" : m));
       }
-      await dispatchChartAction({
+      const res = await dispatchChartAction({
         action: "select_tool",
         tool: next ?? "cursor",
       });
+      // The chart can refuse a tool it doesn't support — roll the UI back
+      // so the pencil never claims a mode the chart isn't in.
+      if (next && !res.ok) setActiveTool(null);
     },
     [activeTool, dispatchChartAction],
   );

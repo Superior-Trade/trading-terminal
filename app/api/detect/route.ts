@@ -9,6 +9,7 @@ import { renderMemory } from "../../../lib/agent-memory";
 import { TIER_RUBRIC } from "../../../lib/tier-rubric";
 import { INDICATOR_TIER_DIGEST } from "../../../lib/indicator-tiers";
 import { SIZING_RUBRIC } from "../../../lib/sizing-rubric";
+import { METRICS_HONESTY } from "../../../lib/metrics-honesty";
 import { marketContext } from "../../../lib/market-context";
 import { buildOrderflowDigest, footprintEnabled } from "../../../lib/orderflow-digest";
 
@@ -173,6 +174,8 @@ State each level's *Condition as the actual TRIGGER (usually an indicator/condit
 DIRECTION — trending reads get long/short plans; RANGE reads get a "neutral" plan that trades BOTH sides (buy the lower bound, short the upper bound — one rotation rule). CHECK FOR THE RANGE READ EXPLICITLY on every detect: when price has been oscillating between identifiable bounds (flat/contracting Bollinger bands, small 24h change with repeated touches of both a support and a resistance, mid-range price), one of your plans SHOULD be the neutral rotation — omitting it on a clearly range-bound chart under-serves the read and is a coverage miss, not caution. A neutral plan is a rotation rule, so it is almost always mode=recurring. Levels for a neutral plan: entry/stop/target describe the LONG leg at the lower bound (stop below entry, target toward the upper bound); spell out the mirrored short leg in the entryCondition and thesis so it compiles as a two-sided strategy (can_short=True, both enter_long AND enter_short). Only skip neutral when the chart is genuinely trending or the bounds are not real.
 MODE — classify each plan's execution life by its ENTRY TRIGGER, not by how specific the setup is (every plan here is specific; that alone does NOT make it one_shot). one_shot: the entry is a genuinely ONE-TIME structural event at a fixed price — once it plays out (win or lose) re-entering makes no sense (a swept low reclaim, a single breakout-retest of a named level). recurring: the entry condition is REPEATABLE and will trigger again in this regime — every indicator-driven entry (band touch, EMA/VWAP cross or reclaim, RSI threshold) and every range-rotation play is recurring; the deployed bot re-enters on each trigger. Rough prior: most indicator/range plans are recurring; only clean one-time structural plays are one_shot. When unsure, choose recurring. A mixed set of modes across your 2-4 plans is normal when the scenarios genuinely differ — but never force a mix.
 Assign every plan a quality TIER and a one-line tierReason using the rubric below. Be discriminating: most setups are B/C. Reserve S/A for genuine multi-factor confluence with regime fit and strong R:R. Rank the returned plans best-tier-first. Never write a numeric R:R (e.g. "2.4 R:R") in tierReason — the badge shows the exact ratio computed from your entry/stop/target, so any number you type would clash with it; describe R:R qualitatively only.
+
+${METRICS_HONESTY}
 
 ${SIZING_RUBRIC}
 

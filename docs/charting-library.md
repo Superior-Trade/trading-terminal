@@ -16,9 +16,9 @@ backtest and deploy all work end to end. What it cannot do:
 
 | | Advanced Charts | Preview |
 |---|---|---|
-| **Drawing on the chart yourself** | trendlines, zones, brush, fib, text | **none** |
+| **Drawing on the chart yourself** | full toolset incl. text | brush, trendlines, rays, levels, verticals, rectangles, fibs |
 | Indicator studies | full library, configurable | none |
-| Agent levels, zones, trendlines, channels, fibs | yes | yes |
+| Agent levels, zones, trendlines, verticals, channels, fibs | yes | yes |
 | Entry/stop/target and position overlays | yes | yes |
 | Order-flow footprint overlay | yes | no |
 | Saved chart layouts | yes | no |
@@ -26,12 +26,17 @@ backtest and deploy all work end to end. What it cannot do:
 | Candles, crosshair, live updates | yes | yes |
 
 The first row is the one that matters. "Draw where you think the market is going" is step
-one of the product, and the preview has no drawing tools — so on a preview build you
-describe your read in words instead, and the agent still answers with a plan drawn onto
-the chart. The loop works; its opening move is narrower.
+one of the product, and the preview's on-chart toolbar covers it: a freehand brush,
+trendlines, rays, horizontal levels, vertical lines, rectangles and fib retracements, all
+price/time-anchored primitives the agent reads exactly like TradingView drawings. (While
+the brush is armed the chart's own pan/zoom pauses so the drag draws instead of panning;
+it resumes the moment the brush is disarmed.) What stays Advanced-only is text notes and
+the study engine.
 
-Actions the preview cannot perform return a truthful error rather than a silent success,
-so the agent never claims to have plotted an indicator that is not there.
+Actions the preview cannot perform return a truthful error rather than a silent success —
+pointing at Advanced Charts or the hosted terminal at
+[terminal.superior.trade](https://terminal.superior.trade) — so the agent never claims to
+have plotted an indicator that is not there.
 
 ## 1. Get access
 
@@ -104,3 +109,10 @@ The library draws candles. Everything else is ours and is in this repository:
 | `components/chart/venue-datafeed-router.ts` | Routes a symbol to the right venue |
 | `components/chart/footprint-overlay.tsx` | Order-flow footprint drawn over the chart |
 | `lib/chart-bridge.tsx` | Lets the agent read and draw on the chart |
+
+## Testing the preview chart with Advanced Charts installed
+
+Set `FORCE_PREVIEW_CHART=1` when starting the dev server to build against the
+bundled Lightweight Charts preview even when `public/static/charting_library`
+exists. This is how you test the fresh-clone experience without moving the
+TradingView install.

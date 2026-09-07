@@ -50,3 +50,17 @@ A few things worth knowing if you host it:
   validator catches the failures we know about — not the ones we do not.
 - **`FREEZE_ALL=1`** rejects every money-moving route with a 503. It is there for the
   moment you need everything to stop while you work out what happened.
+
+## Official channels
+
+Everything official lives at exactly these addresses:
+
+- [github.com/Superior-Trade](https://github.com/Superior-Trade) — the code
+- [superior.trade](https://superior.trade) and
+  [terminal.superior.trade](https://terminal.superior.trade) — the product
+- [@SuperiorTrade_](https://x.com/SuperiorTrade_) on X
+- [discord.gg/aVZR8cCxcR](https://discord.gg/aVZR8cCxcR)
+
+Anything else claiming to be us is not us. We will never DM you first, and **there is
+no Superior Trade token and there never will be** — anyone selling one is running a
+scam. Report impersonation to **security@superior.trade**.
