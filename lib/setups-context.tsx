@@ -213,6 +213,66 @@ export function safetyRejectMessage(
     : `${lead} ${first}`;
 }
 
+export function deployFailureMessage(
+  rawError: string,
+  t: (k: string) => string,
+): string {
+  // Two failure classes carry long, scary internal detail (deployment
+  // IDs, wallet addresses, the fallback chain; or the stop/leverage math).
+  // Show a short, calm line — the full text is already tracked in analytics
+  // and logged server-side / fed to the compile repair loop.
+  const walletBusy =
+    /already running a live strategy|already linked to deployment|duplicate_wallet|live one-shot order|wallet_occupied/i.test(
+      rawError,
+    );
+  // The server names the trading account and the strategy holding it, and
+  // that sentence is the whole answer — pass it through rather than
+  // replacing it with a generic line that omits both.
+  const walletBusyNamed = /already running a live strategy \(/i.test(rawError);
+  const safetyReject = /failed safety validation/i.test(rawError);
+  return isFundingFailure(rawError)
+    ? // The server-composed funding sentence carries the actual balance and
+      // requirement ("Your trading account holds $3.20 — this deployment
+      // needs at least $105.00 …") — pass it through verbatim; only cryptic
+      // upstream/exchange strings get swapped for the generic prompt.
+      isServerFundingGuidance(rawError)
+      ? rawError
+      : t("deployNeedsFunding")
+    : walletBusy
+      ? walletBusyNamed
+        ? rawError
+        : t("deployWalletBusy")
+      : safetyReject
+        ? safetyRejectMessage(rawError, t)
+        : rawError;
+}
+
+/** The deposit sentence composed server-side (lib/superior-api's
+ *  insufficientBalanceMessage) — already plain language WITH the amounts, so
+ *  it must reach the user unedited. */
+function isServerFundingGuidance(rawError: string): boolean {
+  return /add funds via the deposit button/i.test(rawError);
+}
+
+export function isFundingFailure(rawError: string): boolean {
+  // Match only what a DEPOSIT actually fixes. Margin rejections are different:
+  // the wallet can be funded but the order can still exceed free margin after
+  // fees, existing exposure, leverage rounding, or exchange-side requirements.
+  // This used to test loose substrings — "does not exist", "does not have", a
+  // bare "agent wallet" — which appear in errors that have nothing to do with
+  // money ("Failed to export agent wallet key", "Hyperliquid approveAgent
+  // failed: invalid agent wallet") and popped the deposit dialog at people
+  // whose accounts were fully funded. "User or API Wallet 0x… does not exist"
+  // is kept, matched on its own distinctive phrase — that one really does
+  // mean an unfunded HL account.
+  return (
+    isServerFundingGuidance(rawError) ||
+    /not (?:have )?enough|doesn't hold enough|below the \$?10\b|minimum order|balance too low|raise the funding|no funds|not[ _]funded|no hyperliquid balance|deposit into it|user or api wallet/i.test(
+      rawError,
+    )
+  );
+}
+
 // "EDIT 3 - Mean Reversion" → prefix strip + number capture for edit cards.
 const EDIT_PREFIX_RE = /^EDIT\s+\d+\s+-\s+/i;
 const EDIT_NUM_RE = /^EDIT\s+(\d+)\s+-\s+/i;
@@ -517,41 +577,7 @@ export function SetupsProvider({ children }: { children: ReactNode }) {
         // account + no approved agent wallet until it's funded). For those we
         // swap the cryptic exchange string for a plain deposit prompt and open
         // the deposit dialog — the fix is funding, not retrying.
-        // Match only what a DEPOSIT actually fixes. This used to test loose
-        // substrings — "does not exist", "does not have", a bare "agent wallet"
-        // — which appear in errors that have nothing to do with money:
-        // "Failed to export agent wallet key", "Hyperliquid approveAgent
-        // failed: invalid agent wallet". Those are key and bootstrap failures,
-        // and they popped the deposit dialog at people whose accounts were
-        // fully funded. "User or API Wallet 0x… does not exist" is kept, but
-        // matched on its own distinctive phrase rather than on "does not
-        // exist" alone — that one really does mean an unfunded HL account.
-        const needsFunding =
-          /insufficient|not (?:have )?enough|below the \$?10\b|minimum order|balance too low|raise the funding|no funds|not[ _]funded|no hyperliquid balance|deposit into it|user or api wallet/i.test(
-            rawError,
-          );
-        // Two failure classes carry long, scary internal detail (deployment
-        // IDs, wallet addresses, the fallback chain; or the stop/leverage math).
-        // Show a short, calm line — the full text is already tracked above and
-        // logged server-side / fed to the compile repair loop.
-        const walletBusy =
-          /already running a live strategy|already linked to deployment|duplicate_wallet|live one-shot order|wallet_occupied/i.test(
-            rawError,
-          );
-        // The server names the trading account and the strategy holding it, and
-        // that sentence is the whole answer — pass it through rather than
-        // replacing it with a generic line that omits both.
-        const walletBusyNamed = /already running a live strategy \(/i.test(rawError);
-        const safetyReject = /failed safety validation/i.test(rawError);
-        const error = needsFunding
-          ? t("deployNeedsFunding")
-          : walletBusy
-            ? walletBusyNamed
-              ? rawError
-              : t("deployWalletBusy")
-            : safetyReject
-              ? safetyRejectMessage(rawError, t)
-              : rawError;
+        const error = deployFailureMessage(rawError, t);
         setDeployProgress((p) =>
           p && p.planId === plan.id ? { ...p, error } : p,
         );
@@ -559,7 +585,7 @@ export function SetupsProvider({ children }: { children: ReactNode }) {
           t("deployFailedNote").replace("{title}", plan.title).replace("{error}", error),
           "Deploy · Superior infra",
         );
-        if (needsFunding) {
+        if (isFundingFailure(rawError)) {
           try {
             window.dispatchEvent(new Event("cg:open-deposit"));
           } catch {

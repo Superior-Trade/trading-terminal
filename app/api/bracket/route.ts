@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireSuperiorAuth } from "../../../lib/account";
 import { track } from "../../../lib/analytics";
 import { fundsFrozen } from "../../../lib/kill-switch";
+import { withInsufficientBalanceGuidance } from "../../../lib/superior-api";
 
 export const runtime = "nodejs";
 
@@ -40,7 +41,15 @@ export async function POST(req: Request) {
       headers: { "x-api-key": key, "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    // Funding failures get the plain deposit sentence (balance + requirement
+    // + the Deposit button) in `message`, which is what the plan card shows
+    // and what the chat relays; the raw upstream wording stays in
+    // `upstream_message` (and below in analytics).
+    const json = withInsufficientBalanceGuidance(
+      (await res.json().catch(() => ({}))) as Record<string, unknown>,
+      res.status === 201,
+      "order",
+    );
     track(res.status === 201 ? "bracket_placed" : "bracket_failed", {
       user: user.id,
       props: {
@@ -50,7 +59,11 @@ export async function POST(req: Request) {
         leverage: typeof body.leverage === "number" ? body.leverage : undefined,
         ...(res.status === 201
           ? { wallet: String(json.wallet_address ?? "") }
-          : { status: res.status, error: String(json.message ?? json.error ?? "").slice(0, 200) }),
+          : {
+              status: res.status,
+              // Analytics keeps the RAW upstream cause, not the softened copy.
+              error: String(json.upstream_message ?? json.message ?? json.error ?? "").slice(0, 200),
+            }),
       },
     });
     return NextResponse.json(json, { status: res.status });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { safetyRejectMessage } from "./setups-context";
+import { deployFailureMessage, safetyRejectMessage } from "./setups-context";
 
 // The dictionary is not loaded in a unit test; t() is identity-ish here, which
 // is enough to assert WHICH text is chosen.
@@ -56,6 +56,26 @@ describe("safetyRejectMessage", () => {
   it("handles the prefix being absent or differently cased", () => {
     const msg = safetyRejectMessage("Strategy Failed Safety Validation\nsome rule", t);
     expect(msg).toContain("some rule");
+  });
+});
+
+describe("deployFailureMessage", () => {
+  it("does not turn insufficient margin into a deposit-needed error", () => {
+    expect(
+      deployFailureMessage("Insufficient margin to place order. asset=0", t),
+    ).toBe("Insufficient margin to place order. asset=0");
+  });
+
+  it("still maps truly unfunded accounts to the deposit-needed message", () => {
+    expect(
+      deployFailureMessage("account_not_funded_on_hyperliquid", t),
+    ).toBe("deployNeedsFunding");
+  });
+
+  it("passes the server's funding sentence through verbatim — it carries the amounts", () => {
+    const server =
+      "Your trading account holds $3.20 — this deployment needs at least $105.00. Add funds via the Deposit button (top right), then deploy again.";
+    expect(deployFailureMessage(server, t)).toBe(server);
   });
 });
 

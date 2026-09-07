@@ -68,6 +68,95 @@ async function jsonOf(res: Response): Promise<Record<string, unknown>> {
   return (await res.json().catch(() => ({}))) as Record<string, unknown>;
 }
 
+/* ── Insufficient-balance mapping ──────────────────────────────────────
+ *  A $0 account pressing Deploy used to surface the upstream API's own
+ *  wording ("account_not_funded_on_hyperliquid", "This bracket needs about
+ *  $61.95 of margin. Main: $0.00 available …") or nothing at all — new users
+ *  never learned that funding was the problem. Everything upstream can say
+ *  about missing money funnels through here into ONE plain sentence that
+ *  names the balance, the requirement, and the Deposit button, and that same
+ *  string reaches the UI card/toast AND the chat agent's tool results
+ *  (routes and agent tools both call these libs). */
+
+/** Upstream codes that all mean "the account does not hold enough USDC" —
+ *  i.e. a deposit is THE fix. From the upstream Superior API: bracket
+ *  (insufficient_funds 409, wallet_unfunded 409), deployment credentials
+ *  (insufficient_subaccount_balance 400), Hyperliquid onboarding
+ *  (account_not_funded_on_hyperliquid 400) and deploy allocation
+ *  (insufficient_for_lighter_minimum 400). Deliberately NOT included:
+ *  insufficient_margin (402) — the venue rejecting an order on a FUNDED
+ *  account, where lowering size/leverage is as valid a fix as depositing. */
+const INSUFFICIENT_BALANCE_CODES = new Set([
+  "insufficient_funds",
+  "wallet_unfunded",
+  "insufficient_subaccount_balance",
+  "account_not_funded_on_hyperliquid",
+  "insufficient_for_lighter_minimum",
+]);
+
+/** Message fallback for upstream responses that carry no code. */
+const INSUFFICIENT_BALANCE_TEXT =
+  /insufficient (?:funds|balance)|holds no balance|no hyperliquid balance|not (?:yet )?funded|below the \$\d+(?:\.\d+)?(?:\s*USDC)? minimum|minimum deposit of \$/i;
+
+export function isInsufficientBalanceError(json: Record<string, unknown>): boolean {
+  return (
+    INSUFFICIENT_BALANCE_CODES.has(String(json.error ?? "")) ||
+    INSUFFICIENT_BALANCE_TEXT.test(String(json.message ?? ""))
+  );
+}
+
+/** The one funding sentence users see. Degrades cleanly when a figure is
+ *  unknown; the client keys off the "Add funds via the Deposit button"
+ *  phrase to open the deposit dialog and show this text verbatim. */
+export function insufficientBalanceMessage(opts: {
+  kind: "deployment" | "order";
+  holdsUsd?: number | null;
+  neededUsd?: number | null;
+}): string {
+  const what = opts.kind === "deployment" ? "this deployment" : "this order";
+  const again = opts.kind === "deployment" ? "deploy again" : "try again";
+  const holds =
+    typeof opts.holdsUsd === "number" && Number.isFinite(opts.holdsUsd)
+      ? `Your trading account holds $${opts.holdsUsd.toFixed(2)}`
+      : "Your trading account doesn't hold enough USDC";
+  const needs =
+    typeof opts.neededUsd === "number" && Number.isFinite(opts.neededUsd)
+      ? `${what} needs at least $${opts.neededUsd.toFixed(2)}`
+      : `not enough for ${what}`;
+  return `${holds} — ${needs}. Add funds via the Deposit button (top right), then ${again}.`;
+}
+
+/** Total reachable balance from an upstream bracket `accounts` breakdown
+ *  (strings like "Main: $12.50 available (…)"). Null when unparseable. */
+function reachableFromBreakdown(accounts: unknown): number | null {
+  if (!Array.isArray(accounts) || !accounts.length) return null;
+  let sum = 0;
+  for (const row of accounts) {
+    const m = /\$([0-9]+(?:\.[0-9]+)?) available/.exec(String(row));
+    if (!m) return null;
+    sum += parseFloat(m[1]);
+  }
+  return Math.floor(sum * 100) / 100;
+}
+
+/** Rewrite an upstream failure body so `message` carries the plain funding
+ *  sentence (original wording preserved in `upstream_message`). Non-funding
+ *  failures pass through untouched. */
+export function withInsufficientBalanceGuidance(
+  json: Record<string, unknown>,
+  ok: boolean,
+  kind: "deployment" | "order",
+): Record<string, unknown> {
+  if (ok || !isInsufficientBalanceError(json)) return json;
+  const neededUsd = typeof json.needed_usd === "number" ? json.needed_usd : null;
+  const holdsUsd = reachableFromBreakdown(json.accounts);
+  return {
+    ...json,
+    upstream_message: json.message ?? json.error ?? null,
+    message: insufficientBalanceMessage({ kind, holdsUsd, neededUsd }),
+  };
+}
+
 /** POST /v2/backtesting + auto-start. Returns upstream JSON + status. */
 export async function submitBacktest(
   key: string,
@@ -906,6 +995,55 @@ export async function deployStrategy(
   key: string,
   body: { name?: string; config?: { exchange?: { name?: string } }; code?: string },
 ): Promise<DeployResult> {
+  const exchange = body.config?.exchange?.name ?? "hyperliquid";
+  const stakeRaw = (body.config as { stake_amount?: unknown } | undefined)
+    ?.stake_amount;
+  const stakeUsd =
+    typeof stakeRaw === "number" && Number.isFinite(stakeRaw) ? stakeRaw : null;
+
+  // ── Funding pre-flight ──
+  // An unfunded account otherwise pays for the whole create→credentials→start
+  // pipeline and gets back an upstream step error written for operators
+  // ("account_not_funded_on_hyperliquid") — which is how unfunded new users
+  // deployed into opaque failures. When everything the funding pool can
+  // reach (main deployable incl. held USDC + idle trading accounts) cannot
+  // cover the stake with fundWallet's ×1.05 fee/reserve headroom, fail BEFORE
+  // creating anything, with the deposit guidance. Best-effort: any unknown
+  // balance or overview failure lets the deploy proceed and the post-hoc
+  // mapping below still translates the upstream error.
+  if (stakeUsd !== null && exchange === "hyperliquid") {
+    try {
+      const wallets = await walletOverview(key);
+      const main = wallets.find((w) => w.isMain);
+      if (main && main.deployableUsd !== null) {
+        const idleSum = wallets
+          .filter((w) => !w.isMain && !w.occupied)
+          .reduce((s, w) => s + (w.withdrawableUsd ?? 0), 0);
+        const reachable = Math.floor((main.deployableUsd + idleSum) * 100) / 100;
+        const needed = Math.ceil(stakeUsd * 1.05 * 100) / 100;
+        if (reachable < needed) {
+          return {
+            status: 400,
+            json: {
+              error: "insufficient_balance",
+              message: insufficientBalanceMessage({
+                kind: "deployment",
+                holdsUsd: reachable,
+                neededUsd: needed,
+              }),
+              holds_usd: reachable,
+              needed_usd: needed,
+            },
+            steps: { create: 400 },
+            stepErrors: {},
+          };
+        }
+      }
+    } catch {
+      /* pre-flight is best-effort */
+    }
+  }
+
   const payload = body.config
     ? { ...body, config: withConfigDefaults(body.config as Record<string, unknown>) }
     : body;
@@ -921,12 +1059,6 @@ export async function deployStrategy(
   if (!created.ok || !id) {
     return { status: created.status, json, steps, stepErrors };
   }
-
-  const exchange = body.config?.exchange?.name ?? "hyperliquid";
-  const stakeRaw = (body.config as { stake_amount?: unknown } | undefined)
-    ?.stake_amount;
-  const stakeUsd =
-    typeof stakeRaw === "number" && Number.isFinite(stakeRaw) ? stakeRaw : null;
 
   const applyTa = (ta: Awaited<ReturnType<typeof tryDeployOnTradingAccount>>) => {
     steps.credentials = 200;
@@ -982,6 +1114,12 @@ export async function deployStrategy(
     if (creds && !creds.ok) {
       const e = await jsonOf(creds);
       stepErrors.credentials = String(e.message ?? e.error ?? "");
+      if (isInsufficientBalanceError(e)) {
+        stepErrors.credentials = insufficientBalanceMessage({
+          kind: "deployment",
+          neededUsd: typeof e.needed_usd === "number" ? e.needed_usd : null,
+        });
+      }
       // Keep the CODE as well as the message. The busy-wallet test below used
       // to run on the message alone, so a new rejection reason whose prose
       // happened not to contain "duplicate_wallet" silently disabled the
@@ -1071,6 +1209,15 @@ export async function deployStrategy(
   if (start && !start.ok) {
     const e = await jsonOf(start);
     stepErrors.start = String(e.message ?? e.error ?? "");
+    // Unfunded accounts that slipped past the pre-flight ("unlimited" stake,
+    // unknown balances, races) fail at start (allocation / HL onboarding) —
+    // same translation, so the deposit guidance is what reaches the user.
+    if (isInsufficientBalanceError(e)) {
+      stepErrors.start = insufficientBalanceMessage({
+        kind: "deployment",
+        neededUsd: typeof e.needed_usd === "number" ? e.needed_usd : null,
+      });
+    }
   }
 
   return { status: 200, json, steps, stepErrors };
@@ -1440,7 +1587,10 @@ export async function placeBracket(
     headers: headers(key),
     body: JSON.stringify(payload),
   });
-  return { status: res.status, json: await jsonOf(res) };
+  return {
+    status: res.status,
+    json: withInsufficientBalanceGuidance(await jsonOf(res), res.ok, "order"),
+  };
 }
 
 /** DELETE /v2/bracket/:id — cancel a bracket and free its wallet. */
