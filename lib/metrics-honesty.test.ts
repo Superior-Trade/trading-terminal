@@ -3,10 +3,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { METRICS_HONESTY } from "./metrics-honesty";
 
-// Guards against the "50-60% win rate" incident: the agent invented a win
-// rate for a strategy whose real backtest said 27.63%. The rule must forbid
-// unmeasured figures, require sample size + period on measured ones, and
-// stay wired into BOTH prompts that talk about setups.
+// The rule must forbid unmeasured figures, require sample size + period on
+// measured ones, and stay wired into BOTH prompts that talk about setups.
 
 describe("METRICS_HONESTY", () => {
   it("forbids performance figures without a computed backtest behind them", () => {

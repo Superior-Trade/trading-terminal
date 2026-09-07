@@ -1183,9 +1183,8 @@ export function FloatingChat() {
         action: "select_tool",
         tool: next ?? "cursor",
       });
-      // The chart can refuse a tool (e.g. the preview has no brush). Arming
-      // the button anyway lit the pencil while nothing could draw — roll the
-      // UI back so it never claims a mode the chart isn't in.
+      // The chart can refuse a tool it doesn't support — roll the UI back
+      // so the pencil never claims a mode the chart isn't in.
       if (next && !res.ok) setActiveTool(null);
     },
     [activeTool, dispatchChartAction],

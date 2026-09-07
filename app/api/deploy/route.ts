@@ -4,6 +4,7 @@ import { deployStrategy } from "../../../lib/superior-api";
 import { track } from "../../../lib/analytics";
 import { fundsFrozen } from "../../../lib/kill-switch";
 import { normalizeConfigPairs } from "../../../lib/pair-normalize";
+import { MIN_STAKE_USD } from "../../../lib/sizing-ceiling";
 
 export const runtime = "nodejs";
 // Allocate-on-deploy (#903) moved the on-chain funding of the trading account
@@ -39,17 +40,15 @@ export async function POST(req: Request) {
     const bodyCfg = (body as { config?: Record<string, unknown> })?.config;
     if (bodyCfg) normalizeConfigPairs(bodyCfg);
     // The deployable minimum is $11, not Hyperliquid's $10 order minimum:
-    // upstream reserves stake × 1.05 for fees/headroom and rejects anything
-    // under $11 ("increase to at least $11"), so a $10 stake passed a $10
-    // gate here and still failed upstream. ("unlimited" and missing stakes
-    // size off wallet balance — those pass through.)
+    // upstream reserves stake × FUNDING_BUFFER for fees/headroom and rejects
+    // anything under $11 ("increase to at least $11"). ("unlimited" and
+    // missing stakes size off wallet balance — those pass through.)
     const stake = (body as { config?: { stake_amount?: unknown } })?.config
       ?.stake_amount;
-    if (typeof stake === "number" && stake < 11) {
+    if (typeof stake === "number" && stake < MIN_STAKE_USD) {
       return NextResponse.json(
         {
-          error:
-            "stake_amount below the $11 deploy minimum (Hyperliquid's $10 order value plus the upstream ×1.05 fee reserve) — raise the funding to at least 11 USDC",
+          error: `stake_amount below the $${MIN_STAKE_USD} deploy minimum (Hyperliquid's $10 order value plus the upstream fee reserve) — raise the funding to at least ${MIN_STAKE_USD} USDC`,
         },
         { status: 400 },
       );
