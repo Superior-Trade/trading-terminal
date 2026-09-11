@@ -33,13 +33,13 @@
     "record": "node scripts/record.mjs"
   },
   "dependencies": {
-    "@ai-sdk/react": "^4.0.16",
+    "@ai-sdk/react": "^4.0.96",
     "@electric-sql/pglite": "^0.3.11",
     "@neondatabase/serverless": "^0.10.4",
     "@nktkas/hyperliquid": "^0.32.1",
-    "@openrouter/ai-sdk-provider": "^2.10.0",
+    "@openrouter/ai-sdk-provider": "^3.0.0",
     "@sentry/nextjs": "^10.52.0",
-    "ai": "^6.0.219",
+    "ai": "^7.0.93",
     "drizzle-orm": "^0.45.2",
     "framer-motion": "^12.23.0",
     "lightweight-charts": "^5.2.1",
