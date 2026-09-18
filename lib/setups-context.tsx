@@ -12,6 +12,11 @@ import {
 import { useChartBridge } from "./chart-bridge";
 import { useLang } from "./i18n";
 import { authFetch } from "./client-auth";
+import {
+  ResponseBodyError,
+  readJsonBody,
+  type ResponseBodyProblem,
+} from "./read-json";
 import { track } from "./track";
 import { useAuthGate } from "../components/providers";
 import { type PlanSizingSuggestion } from "./plan-sizing";
@@ -178,6 +183,25 @@ export function withDetails(message: string, details: unknown): string {
   const shown = list.slice(0, 3).join(" · ");
   const rest = list.length - 3;
   return rest > 0 ? `${message} ${shown} (+${rest} more)` : `${message} ${shown}`;
+}
+
+/** A response that never became JSON, said in the user's language. The status
+ *  is the whole content of the message: it separates "we timed out" from
+ *  "something is broken", which is the only distinction the user can act on. */
+export function responseFailureMessage(
+  problem: ResponseBodyProblem,
+  t: (k: string) => string,
+): string {
+  const key =
+    problem.kind === "timeout"
+      ? "deployErrTimeout"
+      : problem.kind === "unavailable"
+        ? "deployErrUnavailable"
+        : "deployErrUnreadable";
+  return t(key)
+    .replace("{status}", String(problem.status))
+    .replace("{detail}", problem.snippet)
+    .trim();
 }
 
 /**
@@ -814,12 +838,13 @@ export function SetupsProvider({ children }: { children: ReactNode }) {
                 }
               : p,
           );
-          const compiled: {
+          type CompileResponse = {
             strategy?: { config: unknown; code: string };
             error?: string;
             validationErrors?: string[];
             rejected?: { configJson: string; code: string };
-          } = await authFetch("/api/compile", {
+          };
+          const compileRes = await authFetch("/api/compile", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -837,7 +862,15 @@ export function SetupsProvider({ children }: { children: ReactNode }) {
                   }
                 : {}),
             }),
-          }).then((r) => r.json());
+          });
+          let compiled: CompileResponse;
+          try {
+            compiled = await readJsonBody<CompileResponse>(compileRes);
+          } catch (err) {
+            if (!(err instanceof ResponseBodyError)) throw err;
+            fail(responseFailureMessage(err.problem, t), "compile");
+            return;
+          }
           if (!compiled.strategy) {
             // Safety-guard rejection (422): route the rejected artifact +
             // errors back through the repair pass instead of failing.
@@ -878,7 +911,20 @@ export function SetupsProvider({ children }: { children: ReactNode }) {
                 : {}),
             }),
           });
-          j = await dep.json();
+          try {
+            j = await readJsonBody<typeof j>(dep);
+          } catch (err) {
+            if (!(err instanceof ResponseBodyError)) throw err;
+            // This call creates the deployment, funds it and starts the pod.
+            // A response that never arrived is not evidence that none of that
+            // happened, so the message must not read as "nothing to see here" —
+            // a blind retry would deploy twice with real money.
+            fail(
+              `${responseFailureMessage(err.problem, t)} ${t("deployMaybeCreated")}`,
+              "create",
+            );
+            return;
+          }
           if (dep.ok && j.id) {
             created = true;
             break;

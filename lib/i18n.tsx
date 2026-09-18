@@ -654,6 +654,28 @@ const DICT: Record<string, { en: string; zh: string }> = {
   deployErrWallet: { en: "wallet attachment failed", zh: "綁定錢包失敗" },
   deployErrPodStart: { en: "pod start failed", zh: "啟動交易程序失敗" },
   deployErrGeneric: { en: "deploy failed", zh: "部署失敗" },
+  // A response that never made it to JSON: a gateway timeout or an upstream
+  // error page. {status} is the HTTP status, {detail} an excerpt of whatever
+  // did arrive (often empty).
+  deployErrTimeout: {
+    en: "The server took too long to respond (HTTP {status}).",
+    zh: "伺服器回應逾時（HTTP {status}）。",
+  },
+  deployErrUnavailable: {
+    en: "The service is temporarily unavailable (HTTP {status}). Try again in a moment.",
+    zh: "服務暫時無法使用（HTTP {status}），請稍後再試。",
+  },
+  deployErrUnreadable: {
+    en: "The server returned an unreadable response (HTTP {status}). {detail}",
+    zh: "伺服器回應無法解讀（HTTP {status}）。{detail}",
+  },
+  // The deploy call funds the account and starts the pod, so a transport
+  // failure is not proof that nothing happened. Retrying blind would deploy
+  // twice with real money.
+  deployMaybeCreated: {
+    en: "The deployment may still have been created — check Running before deploying again.",
+    zh: "部署仍可能已建立 — 請先查看「執行中」再重新部署。",
+  },
   // Shown instead of the raw exchange error when the account simply isn't
   // funded/onboarded yet (new account, empty wallet). The fix is a deposit,
   // not a retry — the deposit dialog opens alongside this.
