@@ -36,7 +36,7 @@
     "@ai-sdk/react": "^4.0.16",
     "@electric-sql/pglite": "^0.3.11",
     "@neondatabase/serverless": "^0.10.4",
-    "@nktkas/hyperliquid": "^0.32.1",
+    "@nktkas/hyperliquid": "^0.33.3",
     "@openrouter/ai-sdk-provider": "^2.10.0",
     "@sentry/nextjs": "^10.52.0",
     "ai": "^6.0.219",
