@@ -43,7 +43,7 @@
     "drizzle-orm": "^0.45.2",
     "framer-motion": "^12.23.0",
     "lightweight-charts": "^5.2.1",
-    "next": "16.2.12",
+    "next": "16.4.3",
     "pg": "^8.13.1",
     "qrcode": "^1.5.4",
     "react": "19.2.3",
