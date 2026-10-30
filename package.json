@@ -38,7 +38,7 @@
     "@neondatabase/serverless": "^0.10.4",
     "@nktkas/hyperliquid": "^0.32.1",
     "@openrouter/ai-sdk-provider": "^2.10.0",
-    "@sentry/nextjs": "^10.52.0",
+    "@sentry/nextjs": "^10.75.2",
     "ai": "^6.0.219",
     "drizzle-orm": "^0.45.2",
     "framer-motion": "^12.23.0",
