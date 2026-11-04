@@ -28,6 +28,7 @@ import {
   upsertMessages,
   type StoredUIMessage,
 } from "../../../lib/chat-store";
+import { CHAT_MAX_TOKENS } from "../../../lib/model-limits";
 
 export const runtime = "nodejs";
 export const maxDuration = 300; // backtest_run awaits results in-turn
@@ -367,9 +368,9 @@ export async function POST(req: Request) {
     // sees the primary's failure. `models` REPLACES the top-level model, so the
     // primary must lead the list.
     const primaryModel =
-      body.model ?? process.env.AGENT_MODEL ?? "google/gemini-3.5-flash";
+      body.model ?? (process.env.AGENT_MODEL?.trim() || undefined) ?? "google/gemini-3.5-flash";
     const fallbackModel =
-      process.env.FALLBACK_MODEL ?? "anthropic/claude-sonnet-4.5";
+      (process.env.FALLBACK_MODEL?.trim() || undefined) ?? "anthropic/claude-sonnet-4.5";
     const result = streamText({
       // HIGH reasoning effort everywhere (user's explicit choice — detect
       // latency is handled by batched plan publishing + the pre-fetched
@@ -382,6 +383,7 @@ export async function POST(req: Request) {
       messages: modelMessages,
       tools: { ...clientTools(), ...serverTools(getKey) },
       stopWhen: stepCountIs(16),
+      maxOutputTokens: CHAT_MAX_TOKENS,
       // OpenRouter only reports token usage on streamed responses when asked.
       providerOptions: { openrouter: { usage: { include: true } } },
       onStepFinish: ({ usage }) => {

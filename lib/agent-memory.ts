@@ -3,6 +3,7 @@ import { generateObject } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { eq, and, asc } from "drizzle-orm";
 import { getDb, schema } from "./db";
+import { COMPACT_MAX_TOKENS } from "./model-limits";
 
 // ── Conversation memory: rolling compaction ─────────────────────────────
 //
@@ -170,9 +171,10 @@ export async function maybeCompact(
 
     const { object } = await generateObject({
       model: openrouter(
-        process.env.COMPACT_MODEL ?? "anthropic/claude-haiku-4.5",
+        (process.env.COMPACT_MODEL?.trim() || undefined) ?? "anthropic/claude-haiku-4.5",
       ),
       schema: CompactionSchema,
+      maxOutputTokens: COMPACT_MAX_TOKENS,
       system:
         "You compact a trading-copilot conversation into memory. Merge the PRIOR MEMORY with the NEW MESSAGES being archived: carry still-relevant facts forward, drop superseded ones (e.g. a plan that was replaced or closed), and keep exact numbers. Write in English regardless of the conversation language.",
       prompt: [
