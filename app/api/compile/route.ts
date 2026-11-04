@@ -8,6 +8,7 @@ import { logStrategy, codeHash } from "../../../lib/strategy-log";
 import { track } from "../../../lib/analytics";
 import {
   validateStrategySafety,
+  fixEscapedNewlines,
   fixTaLibFloatParams,
 } from "../../../lib/freqtrade-guard";
 import {
@@ -149,7 +150,7 @@ export async function POST(req: Request) {
     // written as ints crash the bot on every candle (7/12 in the 2026-07-10
     // audit, incl. a live deployment) — models keep doing it regardless of
     // prompt wording, so it's rewritten in code.
-    object.code = fixTaLibFloatParams(object.code);
+    object.code = fixTaLibFloatParams(fixEscapedNewlines(object.code));
     // Deterministic safety gate (stop math, liquidation distance, lookahead,
     // NaN indicators, TA-Lib multi-output subscripts, …). Errors flow back
     // through the caller's existing repair loop (body.repair) so the model
