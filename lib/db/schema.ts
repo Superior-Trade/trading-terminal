@@ -173,6 +173,37 @@ export const usageCounter = pgTable(
   (t) => [primaryKey({ columns: [t.userId, t.bucket] })],
 );
 
+// Auto mode (lib/auto-trade). One settings row per account, stored as JSON so
+// adding a limit does not need a migration; lib/auto-trade/settings.ts owns
+// the shape and the defaults (off, dry run).
+export const autoTradeSettings = pgTable("auto_trade_settings", {
+  userId: text("user_id").primaryKey(),
+  settingsJson: text("settings_json").notNull(),
+  updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+});
+
+// Every decision auto mode makes, skips included, so "why did it (not) trade?"
+// always has an answer. kind "deployed" rows are also the record of which
+// deployments auto mode owns — the limits and the stop-all button read them.
+export const autoTradeLog = pgTable(
+  "auto_trade_log",
+  {
+    id: bigint("id", { mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity(),
+    userId: text("user_id").notNull(),
+    runId: text("run_id").notNull(),
+    // "run_start" | "run_end" | "skip" | "reject" | "would_deploy" | "deployed" | "error" | "halt" | "stop_all"
+    kind: text("kind").notNull(),
+    symbol: text("symbol"),
+    deploymentId: text("deployment_id"),
+    message: text("message").notNull(),
+    detailJson: text("detail_json"),
+    createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  },
+  (t) => [index("idx_auto_trade_log_user").on(t.userId, t.createdAt)],
+);
+
 export const strategyLog = pgTable(
   "strategy_log",
   {
@@ -191,4 +222,43 @@ export const strategyLog = pgTable(
     createdAt: bigint("created_at", { mode: "number" }).notNull(),
   },
   (t) => [index("idx_strategy_log_user").on(t.userId, t.createdAt)],
+);
+
+// Paper trading (lib/paper). A virtual account that trades on live Hyperliquid
+// prices and never places an order. State is one JSON row per account
+// (lib/paper/book.ts owns its shape); events and equity are append-only.
+export const paperAccount = pgTable("paper_account", {
+  userId: text("user_id").primaryKey(),
+  stateJson: text("state_json").notNull(),
+  updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+});
+
+export const paperEvents = pgTable(
+  "paper_events",
+  {
+    id: bigint("id", { mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity(),
+    userId: text("user_id").notNull(),
+    // "start" | "decision" | "buy" | "sell" | "stop" | "error"
+    kind: text("kind").notNull(),
+    coin: text("coin"),
+    message: text("message").notNull(),
+    detailJson: text("detail_json"),
+    createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  },
+  (t) => [index("idx_paper_events_user").on(t.userId, t.createdAt)],
+);
+
+export const paperEquity = pgTable(
+  "paper_equity",
+  {
+    id: bigint("id", { mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity(),
+    userId: text("user_id").notNull(),
+    equity: doublePrecision("equity").notNull(),
+    createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  },
+  (t) => [index("idx_paper_equity_user").on(t.userId, t.createdAt)],
 );

@@ -53,6 +53,20 @@ function importRoots(code: string): string[] {
  *  prompt says, so it's fixed in code, not in prose. */
 const TALIB_FLOAT_PARAMS = "nbdevup|nbdevdn|nbdev|fastlimit|slowlimit|vfactor|penetration";
 
+/** The model sometimes returns the whole strategy JSON-escaped a second time:
+ *  one physical line with literal `\n` between statements. Python reads that
+ *  `\` as a line continuation and the strategy fails to load (2 of 3 ETH
+ *  compiles in auto-mode dry runs, 2026-11-04 — the validator below is
+ *  pattern-based, so it passed them). Unescape only when there are no real
+ *  line breaks at all, so a genuine "\n" inside a Python string is never
+ *  touched in normal multi-line code. */
+export function fixEscapedNewlines(code: string): string {
+  if (code.includes("\n") || !code.includes("\\n")) return code;
+  return code.replace(/\\(\\|n|t|r|"|')/g, (_, c: string) =>
+    c === "n" ? "\n" : c === "t" ? "\t" : c === "r" ? "\r" : c,
+  );
+}
+
 export function fixTaLibFloatParams(code: string): string {
   return code.replace(
     new RegExp(`\\b(${TALIB_FLOAT_PARAMS})(\\s*=\\s*)(\\d+)(?![.\\d])`, "g"),
@@ -122,6 +136,15 @@ function taLibMultiOutputHolders(code: string): Map<string, string[]> {
 export function validateStrategySafety({ config, code, leverage }: GuardInput): string[] {
   const errors: string[] = [];
   const lev = Number.isFinite(leverage) && (leverage as number) >= 1 ? (leverage as number) : 1;
+
+  // An IStrategy cannot be written on a few lines. Whatever fixEscapedNewlines
+  // could not recover goes back through the repair loop instead of reaching
+  // the backtester as code that cannot even be imported.
+  if (code.split("\n").filter((l) => l.trim()).length < 5) {
+    errors.push(
+      "code must be a normal multi-line Python file: it arrived on fewer than 5 lines (likely escaped \\n instead of real line breaks)",
+    );
+  }
 
   // Multi-output TA-Lib results (talib.abstract) subscript by the canonical
   // output NAMES. Two shapes raise KeyError on the first candle: an integer

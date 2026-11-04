@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { validateStrategySafety } from "./freqtrade-guard";
+import { fixEscapedNewlines, validateStrategySafety } from "./freqtrade-guard";
 
 // A config that satisfies the pre-existing guard rules (stoploss/roi),
 // so tests isolate the entry-confirmation / no-instant-entry check.
@@ -159,5 +159,33 @@ class S:
     });
     expect(errs.join("\n")).toMatch(/KeyError: 0/);
     expect(errs.join("\n")).toContain("macd['macd']");
+  });
+});
+
+describe("escaped-newline strategies", () => {
+  const real = wrap(
+    "        dataframe.loc[dataframe['rsi'] < 30, 'enter_long'] = 1",
+    "        dataframe.loc[dataframe['rsi'] > 70, 'exit_long'] = 1",
+  );
+  // The shape seen from the model: one physical line, literal \n between statements.
+  const escaped = real.replace(/\n/g, "\\n");
+
+  it("unescapes a strategy that arrived on one line", () => {
+    expect(escaped.includes("\n")).toBe(false);
+    expect(fixEscapedNewlines(escaped)).toBe(real);
+  });
+
+  it("restores escaped quotes and backslashes too", () => {
+    expect(fixEscapedNewlines('x = \\"a\\"\\nprint(\\\\)')).toBe('x = "a"\nprint(\\)');
+  });
+
+  it("leaves normal multi-line code alone, including \\n inside strings", () => {
+    const code = real + "\n    msg = 'a\\nb'\n";
+    expect(fixEscapedNewlines(code)).toBe(code);
+  });
+
+  it("sends one-line code back through repair", () => {
+    expect(has(validateStrategySafety({ config: okConfig, code: escaped }), "multi-line")).toBe(true);
+    expect(has(validateStrategySafety({ config: okConfig, code: real }), "multi-line")).toBe(false);
   });
 });
