@@ -14,6 +14,7 @@ import { MarketPicker } from "./market-picker";
 import { MarketPositioning } from "./market-positioning";
 import { Inbox } from "./inbox";
 import { AutoTradeDialog } from "./auto-trade-dialog";
+import { PaperTradingDialog } from "./paper-trading-dialog";
 
 // Balance polling lives in lib/use-hl-balance.ts (shared with the sizing
 // sliders, which need the withdrawable/tradable figure).
@@ -78,6 +79,7 @@ export function Header() {
   const [depositOpen, setDepositOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [autoOpen, setAutoOpen] = useState(false);
+  const [paperOpen, setPaperOpen] = useState(false);
   // Other surfaces (deploy failing on insufficient funds; the account
   // dropdown's Accounts section) open these dialogs via window events — the
   // dialogs themselves stay mounted here in the header.
@@ -174,6 +176,13 @@ export function Header() {
           Auto
         </button>
         {autoOpen && <AutoTradeDialog onClose={() => setAutoOpen(false)} />}
+        <button
+          onClick={() => setPaperOpen(true)}
+          className="rounded-full border border-white/15 px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-wider text-white/75 transition-colors hover:border-lime-400/60 hover:text-white"
+        >
+          Paper
+        </button>
+        {paperOpen && <PaperTradingDialog onClose={() => setPaperOpen(false)} />}
         {authed && (
           <>
             <Inbox />

@@ -223,3 +223,42 @@ export const strategyLog = pgTable(
   },
   (t) => [index("idx_strategy_log_user").on(t.userId, t.createdAt)],
 );
+
+// Paper trading (lib/paper). A virtual account that trades on live Hyperliquid
+// prices and never places an order. State is one JSON row per account
+// (lib/paper/book.ts owns its shape); events and equity are append-only.
+export const paperAccount = pgTable("paper_account", {
+  userId: text("user_id").primaryKey(),
+  stateJson: text("state_json").notNull(),
+  updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+});
+
+export const paperEvents = pgTable(
+  "paper_events",
+  {
+    id: bigint("id", { mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity(),
+    userId: text("user_id").notNull(),
+    // "start" | "decision" | "buy" | "sell" | "stop" | "error"
+    kind: text("kind").notNull(),
+    coin: text("coin"),
+    message: text("message").notNull(),
+    detailJson: text("detail_json"),
+    createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  },
+  (t) => [index("idx_paper_events_user").on(t.userId, t.createdAt)],
+);
+
+export const paperEquity = pgTable(
+  "paper_equity",
+  {
+    id: bigint("id", { mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity(),
+    userId: text("user_id").notNull(),
+    equity: doublePrecision("equity").notNull(),
+    createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  },
+  (t) => [index("idx_paper_equity_user").on(t.userId, t.createdAt)],
+);

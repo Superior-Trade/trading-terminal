@@ -15,6 +15,13 @@
       "when": 1793760000000,
       "tag": "0001_auto_trade",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793800000000,
+      "tag": "0002_paper",
+      "breakpoints": true
     }
   ]
 }
