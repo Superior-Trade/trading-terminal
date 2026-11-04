@@ -13,6 +13,7 @@ import { WithdrawDialog } from "./withdraw-dialog";
 import { MarketPicker } from "./market-picker";
 import { MarketPositioning } from "./market-positioning";
 import { Inbox } from "./inbox";
+import { AutoTradeDialog } from "./auto-trade-dialog";
 
 // Balance polling lives in lib/use-hl-balance.ts (shared with the sizing
 // sliders, which need the withdrawable/tradable figure).
@@ -76,6 +77,7 @@ export function Header() {
   // Method chooser (Card vs Crypto) — the dialog resolves the deposit link.
   const [depositOpen, setDepositOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [autoOpen, setAutoOpen] = useState(false);
   // Other surfaces (deploy failing on insufficient funds; the account
   // dropdown's Accounts section) open these dialogs via window events — the
   // dialogs themselves stay mounted here in the header.
@@ -165,6 +167,13 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-3">
+        <button
+          onClick={() => setAutoOpen(true)}
+          className="rounded-full border border-white/15 px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-wider text-white/75 transition-colors hover:border-lime-400/60 hover:text-white"
+        >
+          Auto
+        </button>
+        {autoOpen && <AutoTradeDialog onClose={() => setAutoOpen(false)} />}
         {authed && (
           <>
             <Inbox />

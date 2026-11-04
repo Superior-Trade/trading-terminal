@@ -12,6 +12,7 @@ import { SIZING_RUBRIC } from "../../../lib/sizing-rubric";
 import { METRICS_HONESTY } from "../../../lib/metrics-honesty";
 import { marketContext } from "../../../lib/market-context";
 import { buildOrderflowDigest, footprintEnabled } from "../../../lib/orderflow-digest";
+import { DETECT_MAX_TOKENS } from "../../../lib/model-limits";
 
 // DEPRECATED as the terminal's detect path: the Detect button now runs
 // through the chat agent (one brain — market_pulse + suggest_plan; see
@@ -365,9 +366,10 @@ export async function POST(req: Request) {
       // screenshot — Gemini 3.5 Flash held up in live testing (drawings,
       // tiers, zh output). DETECT_MODEL overrides.
       model: openrouter(
-        body.model ?? process.env.DETECT_MODEL ?? "google/gemini-3.5-flash",
+        body.model ?? (process.env.DETECT_MODEL?.trim() || undefined) ?? "google/gemini-3.5-flash",
       ),
       schema: DetectSchema,
+      maxOutputTokens: DETECT_MAX_TOKENS,
       system: SYSTEM,
       messages: [
         {
@@ -419,9 +421,10 @@ export async function POST(req: Request) {
       try {
         const { object: retry } = await generateObject({
           model: openrouter(
-            body.model ?? process.env.DETECT_MODEL ?? "google/gemini-3.5-flash",
+            body.model ?? (process.env.DETECT_MODEL?.trim() || undefined) ?? "google/gemini-3.5-flash",
           ),
           schema: DetectSchema,
+          maxOutputTokens: DETECT_MAX_TOKENS,
           system: SYSTEM,
           messages: [
             {
@@ -455,7 +458,7 @@ export async function POST(req: Request) {
     }
     // Audit every generated plan (debugging + framework-verification corpus).
     const detectModel =
-      body.model ?? process.env.DETECT_MODEL ?? "google/gemini-3.5-flash";
+      body.model ?? (process.env.DETECT_MODEL?.trim() || undefined) ?? "google/gemini-3.5-flash";
     const detectSymbol =
       (body.chartContext as { symbol?: string } | null)?.symbol ?? null;
     await Promise.all(

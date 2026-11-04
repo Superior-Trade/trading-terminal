@@ -3,6 +3,7 @@ import { generateObject } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { z } from "zod";
 import { currentAccount } from "../../../lib/account";
+import { ANNOTATE_MAX_TOKENS } from "../../../lib/model-limits";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -92,8 +93,9 @@ export async function POST(req: Request) {
       .filter(Boolean)
       .join("\n");
     const { object } = await generateObject({
-      model: openrouter(process.env.DETECT_MODEL ?? "google/gemini-3.5-flash"),
+      model: openrouter((process.env.DETECT_MODEL?.trim() || undefined) ?? "google/gemini-3.5-flash"),
       schema: AnnotateSchema,
+      maxOutputTokens: ANNOTATE_MAX_TOKENS,
       system: SYSTEM,
       messages: [
         {

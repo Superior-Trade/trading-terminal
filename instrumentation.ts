@@ -7,6 +7,9 @@ export async function register() {
     // touch it. No-op for a DATABASE_URL you manage yourself.
     const { migrateIfNeeded } = await import("./lib/db/migrate");
     await migrateIfNeeded();
+    // Auto mode's once-a-minute tick. Does nothing until it is turned on.
+    const { startAutoTradeScheduler } = await import("./lib/auto-trade/scheduler");
+    startAutoTradeScheduler();
   }
 
   if (process.env.NEXT_RUNTIME === "edge") {
